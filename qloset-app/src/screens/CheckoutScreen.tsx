@@ -33,35 +33,53 @@ export default function CheckoutScreen() {
   }
 
   const placeOrder = async () => {
-    if (!name.trim()) return Alert.alert('Please enter your name');
-    if (!/^\d{10}$/.test(phone)) return Alert.alert('Enter a valid 10-digit phone');
-    if (!line1.trim()) return Alert.alert('Please enter address line');
-    if (!/^\d{6}$/.test(pincode)) return Alert.alert('Enter a valid 6-digit pincode');
-    if (!items.length) return Alert.alert('Your cart is empty');
+  if (!name.trim()) return Alert.alert('Please enter your name');
+  if (!/^\d{10}$/.test(phone)) return Alert.alert('Enter a valid 10-digit phone');
+  if (!line1.trim()) return Alert.alert('Please enter address line');
+  if (!/^\d{6}$/.test(pincode)) return Alert.alert('Enter a valid 6-digit pincode');
+  if (!items.length) return Alert.alert('Your cart is empty');
 
-    try {
-      setLoading(true);
-      const payload = {
-        userPhone: phone,
-        tbyb,
-        address: { name, phone, line1, landmark, pincode, lat, lng }, // ← includes coords
-        items: items.map(i => ({ variantId: i.variantId, qty: i.qty }))
-      };
-      const res = await fetch(`${API_BASE}/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      clear();
-      Alert.alert('Order placed', `Order ID: ${data.orderId}\nTotal: ₹${data.subtotal}\nTBYB: ${tbyb ? 'Yes' : 'No'}`);
-    } catch (e: any) {
-      Alert.alert('Checkout failed', String(e.message || e));
-    } finally {
-      setLoading(false);
+  try {
+    setLoading(true);
+    const payload = {
+      userPhone: phone,
+      tbyb,
+      address: { name, phone, line1, landmark, pincode, lat, lng }, // includes coords if present
+      items: items.map(i => ({ variantId: i.variantId, qty: i.qty })),
+    };
+
+    const res = await fetch(`${API_BASE}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    // Parse robustly so we can read `message` on errors
+    const raw = await res.text();
+    let data: any = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch { data = { message: raw }; }
+
+    if (!res.ok || data?.ok === false) {
+      const msg =
+        (Array.isArray(data?.message) ? data.message.join('\n') : data?.message) ||
+        data?.error ||
+        `HTTP ${res.status}`;
+      Alert.alert('Checkout failed', msg);
+      return;
     }
-  };
+
+    clear();
+    Alert.alert(
+      'Order placed',
+      `Order ID: ${data.orderId}\nTotal: ₹${data.subtotal}\nTBYB: ${tbyb ? 'Yes' : 'No'}`
+    );
+  } catch (e: any) {
+    Alert.alert('Checkout failed', String(e?.message || 'Network error'));
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   if (!items.length) {
     return <View style={styles.container}><Text>Your cart is empty.</Text></View>;
