@@ -7,7 +7,7 @@ import type { Product, Variant } from '../types';
 import { useCart } from '../state/CartContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Product'>;
-
+//hello
 export default function ProductScreen({ route }: Props) {
   const { id } = route.params;
   const [data, setData] = React.useState<Product | null>(null);
