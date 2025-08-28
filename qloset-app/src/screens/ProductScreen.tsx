@@ -59,3 +59,4 @@ const styles = StyleSheet.create({
   sizeBtnActive: { borderColor: '#000' },
   cta: { marginTop: 16, backgroundColor: '#111', padding: 14, borderRadius: 12, alignItems: 'center' }
 });
+//Coolie;
