@@ -1,46 +1,62 @@
-// qloset-app/src/screens/HomeScreen.tsx
 import * as React from 'react';
-import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { fetchProducts } from '../lib/api';
-import type { Product } from '../types';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { View, FlatList, StyleSheet, RefreshControl } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import TopHeader from '../components/TopHeader';
+import ProductCard from '../components/ProductCard';
+import { API_BASE } from '../lib/api';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
+type HomeNav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
-export default function HomeScreen({ navigation }: Props) {
-  const [data, setData] = React.useState<Product[] | null>(null);
-  const [err, setErr] = React.useState<string | null>(null);
+type Product = {
+  id: string;
+  title: string;
+  priceSale: number;
+  images?: string[];
+};
 
-  React.useEffect(() => {
-    fetchProducts().then(setData).catch(e => setErr(String(e)));
+export default function HomeScreen() {
+  const nav = useNavigation<HomeNav>();
+  const [items, setItems] = React.useState<Product[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/products`);
+      const data = await res.json();
+      setItems(Array.isArray(data) ? data : []);
+    } catch (e) {
+      // noop UI (you can add a toast)
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const go = (id: string) => {
-    console.log('Go Product:', id);
-    navigation.navigate('Product', { id });
-  };
-
-  if (err) return <View style={styles.container}><Text>Error: {err}</Text></View>;
-  if (!data) return <View style={styles.container}><ActivityIndicator /></View>;
+  React.useEffect(() => { load(); }, [load]);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>New in T. Nagar</Text>
+    <View style={styles.screen}>
+      <TopHeader subtitle="Try-before-you-buy in T. Nagar / Pondy Bazaar" />
       <FlatList
-        data={data}
+        contentContainerStyle={styles.listPad}
+        data={items}
+        keyExtractor={(p) => p.id}
         numColumns={2}
-        keyExtractor={(item) => item.id}
+        columnWrapperStyle={{ gap: 12 }}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => go(item.id)}>
-            {item.images?.[0] ? (
-              <Image source={{ uri: item.images[0] }} style={styles.image} />
-            ) : (
-              <View style={styles.image} />
-            )}
-            <Text numberOfLines={1} style={styles.title}>{item.title}</Text>
-            <Text style={styles.price}>₹{item.priceSale}</Text>
-          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <ProductCard
+              id={item.id}
+              title={item.title}
+              price={item.priceSale}
+              image={item.images?.[0] ?? null}
+              onPress={() => nav.navigate('Product', { id: item.id })}
+            />
+          </View>
         )}
       />
     </View>
@@ -48,10 +64,6 @@ export default function HomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  heading: { fontSize: 20, fontWeight: '600', marginBottom: 12 },
-  card: { flex: 1, margin: 8, backgroundColor: '#fff', borderRadius: 12, padding: 12, elevation: 2 },
-  image: { height: 140, backgroundColor: '#eee', borderRadius: 8, marginBottom: 8 },
-  title: { fontSize: 14, fontWeight: '500' },
-  price: { fontSize: 14, marginTop: 4 }
+  screen: { flex: 1, backgroundColor: '#fafafa' },
+  listPad: { padding: 16, gap: 12 },
 });
