@@ -6,6 +6,7 @@ import CartScreen from '../screens/CartScreen';
 import ExploreScreen from '../screens/ExploreScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { useCart } from '../state/CartContext';
+import { color } from '../theme/tokens';
 
 const Tab = createBottomTabNavigator();
 
@@ -15,35 +16,19 @@ export default function Tabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: '#0f0f13', borderTopColor: '#1b1b20' },
+        tabBarStyle: { backgroundColor: '#0f0f13', borderTopColor: '#1b1b20', height: 64, paddingBottom: 10, paddingTop: 6 },
         tabBarActiveTintColor: '#fff',
         tabBarInactiveTintColor: '#9ca3af',
       }}
     >
-      <Tab.Screen
-        name="HomeTab"
-        component={HomeScreen}
-        options={{ title: 'Home', tabBarIcon: () => <Text>🏠</Text> }}
-      />
-      <Tab.Screen
-        name="Explore"
-        component={ExploreScreen}
-        options={{ title: 'Explore', tabBarIcon: () => <Text>🧭</Text> }}
-      />
+      <Tab.Screen name="HomeTab" component={HomeScreen} options={{ title: 'Home', tabBarIcon: () => <Text>🏠</Text> }} />
+      <Tab.Screen name="Explore" component={ExploreScreen} options={{ title: 'Explore', tabBarIcon: () => <Text>🧭</Text> }} />
       <Tab.Screen
         name="CartTab"
         component={CartScreen}
-        options={{
-          title: 'Cart',
-          tabBarIcon: () => <Text>🛒</Text>,
-          tabBarBadge: count > 0 ? count : undefined,
-        }}
+        options={{ title: 'Cart', tabBarIcon: () => <Text>🛒</Text>, tabBarBadge: count > 0 ? count : undefined }}
       />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ title: 'Profile', tabBarIcon: () => <Text>👤</Text> }}
-      />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile', tabBarIcon: () => <Text>👤</Text> }} />
     </Tab.Navigator>
   );
 }

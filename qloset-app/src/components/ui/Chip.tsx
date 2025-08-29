@@ -1,23 +1,26 @@
 import * as React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { Pressable, Text, StyleSheet, Animated } from 'react-native';
+import { color, radius } from '../../theme/tokens';
 
-type Props = {
-  label: string;
-  selected?: boolean;
-  onPress?: () => void;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
-};
+export default function Chip({ label, selected, onPress }: { label: string; selected?: boolean; onPress?: () => void; }) {
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const animate = (to:number) => Animated.spring(scale,{toValue:to,useNativeDriver:true,speed:20,bounciness:8}).start();
 
-export default function Chip({ label, selected, onPress, style, textStyle }: Props) {
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.8}
-      style={[styles.base, selected ? styles.sel : styles.norm, style]}
-    >
-      <Text style={[styles.txt, selected ? styles.txtSel : styles.txtNorm, textStyle]}>{label}</Text>
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => animate(0.98)}
+        onPressOut={() => animate(1)}
+        android_ripple={{ color: '#ffffff22' }}
+        style={[
+          styles.base,
+          selected ? styles.sel : styles.norm,
+        ]}
+      >
+        <Text style={[styles.txt, selected ? styles.txtSel : styles.txtNorm]}>{label}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -25,12 +28,12 @@ const styles = StyleSheet.create({
   base: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 20,
+    borderRadius: radius.pill,
     borderWidth: 1,
   },
-  norm: { backgroundColor: '#fff', borderColor: '#ddd' },
-  sel:  { backgroundColor: '#111', borderColor: '#111' },
-  txt: { fontWeight: '700' },
-  txtNorm: { color: '#111' },
-  txtSel:  { color: '#fff' },
+  norm: { backgroundColor: '#141419', borderColor: '#2a2a31' },
+  sel:  { backgroundColor: '#ffffff', borderColor: '#ffffff' },
+  txt: { fontWeight: '800', letterSpacing: 0.2 },
+  txtNorm: { color: '#ffffff' },
+  txtSel:  { color: '#111111' },
 });
