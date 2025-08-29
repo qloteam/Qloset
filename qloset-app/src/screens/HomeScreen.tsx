@@ -1,25 +1,26 @@
 import * as React from 'react';
-import type { RootStackParamList } from '../../App';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { View, FlatList, StyleSheet, RefreshControl } from 'react-native';
+import { View, FlatList, StyleSheet, RefreshControl, Text, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import TopHeader from '../components/TopHeader';
+import Chip from '../components/ui/Chip';
+import HeroBanner from '../components/HeroBanner';
 import ProductCard from '../components/ProductCard';
 import { API_BASE } from '../lib/api';
-
-type HomeNav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 type Product = {
   id: string;
   title: string;
   priceSale: number;
+  priceMrp?: number;
   images?: string[];
 };
 
+type Segment = 'Women' | 'Men';
+
 export default function HomeScreen() {
-  const nav = useNavigation<HomeNav>();
+  const nav = useNavigation<any>();
   const [items, setItems] = React.useState<Product[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [seg, setSeg] = React.useState<Segment>('Women');
 
   const load = React.useCallback(async () => {
     try {
@@ -27,8 +28,6 @@ export default function HomeScreen() {
       const res = await fetch(`${API_BASE}/products`);
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
-    } catch (e) {
-      // noop UI (you can add a toast)
     } finally {
       setLoading(false);
     }
@@ -36,34 +35,63 @@ export default function HomeScreen() {
 
   React.useEffect(() => { load(); }, [load]);
 
+  // light heuristic: show men when title hints shirt; women when dress.
+  const filtered = React.useMemo(() => {
+    if (seg === 'Men') return items.filter(p => /shirt/i.test(p.title));
+    return items.filter(p => /dress/i.test(p.title)).concat(items.filter(p => !/shirt/i.test(p.title) && !/dress/i.test(p.title)));
+  }, [items, seg]);
+
   return (
-    <View style={styles.screen}>
-      <TopHeader subtitle="Try-before-you-buy in T. Nagar / Pondy Bazaar" />
-      <FlatList
-        contentContainerStyle={styles.listPad}
-        data={items}
-        keyExtractor={(p) => p.id}
-        numColumns={2}
-        columnWrapperStyle={{ gap: 12 }}
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
-        renderItem={({ item }) => (
-          <View style={{ flex: 1 }}>
-            <ProductCard
-              id={item.id}
-              title={item.title}
-              price={item.priceSale}
-              image={item.images?.[0] ?? null}
-              onPress={() => nav.navigate('Product', { id: item.id })}
-            />
-          </View>
-        )}
-      />
-    </View>
+    <FlatList
+      style={{ flex: 1, backgroundColor: '#121216' }}
+      ListHeaderComponent={
+        <>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chips}
+          >
+            {(['Women','Men'] as Segment[]).map(s => (
+              <Chip key={s} label={s} selected={seg===s} onPress={() => setSeg(s)} />
+            ))}
+          </ScrollView>
+
+          <HeroBanner
+            title="Try Before You Buy"
+            subtitle="Free size trial at your doorstep"
+          />
+
+          <Text style={styles.section}>{seg === 'Men' ? 'Trending for Men' : 'Trending for Women'}</Text>
+        </>
+      }
+      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 12 }}
+      data={filtered}
+      keyExtractor={(p) => p.id}
+      numColumns={2}
+      columnWrapperStyle={{ gap: 12 }}
+      ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor="#fff" />}
+      renderItem={({ item }) => (
+        <View style={{ flex: 1 }}>
+          <ProductCard
+            id={item.id}
+            title={item.title}
+            price={item.priceSale}
+            mrp={item.priceMrp}
+            image={item.images?.[0] ?? null}
+            badges={/dress/i.test(item.title) ? ['New'] : ['Deal']}
+            onPress={() => nav.navigate('Product', { id: item.id })}
+          />
+        </View>
+      )}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#fafafa' },
-  listPad: { padding: 16, gap: 12 },
+  chips: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, gap: 8 },
+  section: {
+    color: '#fff', fontSize: 18, fontWeight: '900',
+    paddingHorizontal: 16, marginBottom: 8, marginTop: 4,
+  },
 });

@@ -3,18 +3,18 @@ import { Text, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from './src/screens/LoginScreen';
-import HomeScreen from './src/screens/HomeScreen';
 import ProductScreen from './src/screens/ProductScreen';
 import CartScreen from './src/screens/CartScreen';
 import CheckoutScreen from './src/screens/CheckoutScreen';
+import Tabs from './src/nav/Tabs';
 import { CartProvider, useCart } from './src/state/CartContext';
 
 export type RootStackParamList = {
   Login: undefined;
-  Home: undefined;
+  Home: undefined;            // now renders <Tabs />
   Product: { id: string };
   Cart: undefined;
-  Checkout: undefined; // ← added
+  Checkout: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -33,14 +33,19 @@ export default function App() {
     <CartProvider>
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Login">
-          <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+
+          {/* Home now shows the bottom tab navigator */}
           <Stack.Screen
             name="Home"
-            component={HomeScreen}
-            options={({ navigation }) => ({
-              headerRight: () => <CartButton navigation={navigation} />,
-            })}
+            component={Tabs}
+            options={{ headerShown: false }}
           />
+
           <Stack.Screen
             name="Product"
             component={ProductScreen}
@@ -49,8 +54,18 @@ export default function App() {
               headerRight: () => <CartButton navigation={navigation} />,
             })}
           />
-          <Stack.Screen name="Cart" component={CartScreen} options={{ title: 'Your Cart' }} />
-          <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
+
+          <Stack.Screen
+            name="Cart"
+            component={CartScreen}
+            options={{ title: 'Your Cart' }}
+          />
+
+          <Stack.Screen
+            name="Checkout"
+            component={CheckoutScreen}
+            options={{ title: 'Checkout' }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </CartProvider>
