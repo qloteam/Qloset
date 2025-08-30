@@ -3,14 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "seed": "ts-node prisma/seed.ts",
-    "seed:more": "prisma generate && ts-node prisma/seed_more.ts",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "build": "nest build",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate:dev": "prisma migrate dev --name init",
-    "lint": "eslint ."
+"dev": "nest start --watch",
+  "start": "nest start",
+
+  "build": "nest build",
+  "start:prod": "node dist/main.js",
+
+  "migrate:deploy": "prisma migrate deploy",
+
+  "render:start": "npm run migrate:deploy && node dist/main.js",
+
+  "postinstall": "prisma generate",
+
+  "seed": "ts-node prisma/seed.ts",
+  "seed:more": "prisma generate && ts-node prisma/seed_more.ts",
+
+  "prisma:generate": "prisma generate",
+  "prisma:migrate:dev": "prisma migrate dev --name init",
+
+  "lint": "eslint ."
+    
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
