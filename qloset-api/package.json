@@ -3,38 +3,36 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-"dev": "nest start --watch",
-  "start": "nest start",
-
-  "build": "nest build",
-  "start:prod": "node dist/main.js",
-
-  "migrate:deploy": "prisma migrate deploy",
-
-  "render:start": "npm run migrate:deploy && node dist/main.js",
-
-  "postinstall": "prisma generate",
-
-  "seed": "ts-node prisma/seed.ts",
-  "seed:more": "prisma generate && ts-node prisma/seed_more.ts",
-
-  "prisma:generate": "prisma generate",
-  "prisma:migrate:dev": "prisma migrate dev --name init",
-
-  "lint": "eslint ."
-    
+    "dev": "nest start --watch",
+    "start": "nest start",
+    "build": "nest build",
+    "start:prod": "node dist/main.js",
+    "migrate:deploy": "prisma migrate deploy",
+    "render:start": "npm run migrate:deploy && node dist/main.js",
+    "postinstall": "prisma generate",
+    "seed": "ts-node prisma/seed.ts",
+    "seed:more": "prisma generate && ts-node prisma/seed_more.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev --name init",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.0.0",
     "@prisma/client": "^5.7.0",
     "@turf/boolean-point-in-polygon": "^7.2.0",
     "@turf/helpers": "^7.2.0",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "dotenv": "^16.4.0",
     "nestjs-prisma": "^0.22.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.1.14",
     "rimraf": "^5.0.0",
     "rxjs": "^7.8.0"
@@ -43,6 +41,9 @@
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",
+    "@types/bcrypt": "^6.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/passport-jwt": "^4.0.1",
     "eslint": "^8.0.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",

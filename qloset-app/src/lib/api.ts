@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 export const API_BASE ='https://qloset.onrender.com';
 
 
@@ -43,4 +43,13 @@ export async function verifyOtp(phone: string, code: string) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json(); // { token: 'fake-jwt', user: { phone } } when code === '123456'
 }
+export async function api(path: string, init: RequestInit = {}) {
+  const token = await AsyncStorage.getItem('token');
+  const headers = { ...(init.headers || {}), 'Content-Type': 'application/json' } as any;
+  if (token) headers.Authorization = `Bearer ${token}`;
 
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+  return data;
+}
