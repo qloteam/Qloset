@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-export const API_BASE ='http://192.168.0.4:3000';
+export const API_BASE ='https://qloset.onrender.com';
 
 
 export type Variant = { id: string; size: string; sku: string; stockQty: number };

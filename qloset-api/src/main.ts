@@ -14,7 +14,10 @@ bootstrap();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors(); // or lock to your domains later
+  app.enableCors({
+    origin: '*', // or specify your web origins array
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  }); // or lock to your domains later
   await app.listen(process.env.PORT ? Number(process.env.PORT) : 3000, '0.0.0.0');
 }
 bootstrap();
