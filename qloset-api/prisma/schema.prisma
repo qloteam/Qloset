@@ -79,7 +79,6 @@ model Order {
   discount  Int         @default(0)
   tax       Int         @default(0)
 
-  // Keep ONLY this status field (enum)
   status OrderStatus @default(PENDING)
 
   paymentStatus String  @default("pending")

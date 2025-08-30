@@ -1,5 +1,20 @@
-import { Controller, Get, Param, Post, Body } from '@nestjs/common';
+import { Controller, Get, Param, Post, Body, Patch } from '@nestjs/common';
 import { OrdersService } from './orders.service';
+
+type CreateOrderBody = {
+  userPhone?: string;
+  tbyb?: boolean;
+  address: {
+    name: string;
+    phone: string;
+    line1: string;
+    landmark?: string;
+    pincode: string;
+    lat?: number | null;
+    lng?: number | null;
+  };
+  items: { variantId: string; qty: number }[];
+};
 
 @Controller('orders')
 export class OrdersController {
@@ -16,26 +31,18 @@ export class OrdersController {
   }
 
   @Post()
-  create(@Body() body: {
-    userPhone?: string;
-    tbyb?: boolean;
-    address: {
-      name: string; phone: string; line1: string; landmark?: string;
-      pincode: string; lat?: number | null; lng?: number | null;
-    };
-    items: { variantId: string; qty: number }[];
-  }) {
+  create(@Body() body: CreateOrderBody) {
     return this.ordersService.create(body);
   }
 
-  // mark order as confirmed (payment success or TBYB accepted)
-  @Post(':id/confirm')
+  // Mark order as confirmed (payment success or TBYB accepted)
+  @Patch(':id/confirm')
   confirm(@Param('id') id: string) {
     return this.ordersService.confirm(id);
   }
 
-  // cancel order (user/ops) -> returns stock
-  @Post(':id/cancel')
+  // Cancel order (user/ops) -> immediately frees reservations
+  @Patch(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.ordersService.cancel(id);
   }
