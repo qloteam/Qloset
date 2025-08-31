@@ -1,21 +1,38 @@
-import * as React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { color, radius } from '../../theme/tokens';
+import React from 'react';
+import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { colors, radius } from './colors';
 
-export default function Badge({ title, tone='danger' }: { title: string; tone?: 'danger'|'brand'|'muted' }) {
-  const tones = {
-    danger: { bg: color.danger, fg: '#fff' },
-    brand:  { bg: color.brand, fg: '#fff' },
-    muted:  { bg: '#2a2a31', fg: '#fff' },
-  }[tone];
+type Props = {
+  text: string;
+  tone?: 'default' | 'success' | 'warning' | 'danger';
+  style?: ViewStyle;
+};
+
+export default function Badge({ text, tone = 'default', style }: Props) {
+  const bg =
+    tone === 'success'
+      ? colors.success
+      : tone === 'warning'
+      ? colors.warning
+      : tone === 'danger'
+      ? colors.danger
+      : colors.chipBg;
+
+  const fg = tone === 'default' ? colors.text : colors.primaryText;
+
   return (
-    <View style={[styles.base, { backgroundColor: tones.bg }]}>
-      <Text style={[styles.txt, { color: tones.fg }]}>{title}</Text>
+    <View style={[styles.badge, { backgroundColor: bg }, style]}>
+      <Text style={[styles.text, { color: fg }]}>{text}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  base: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill },
-  txt: { fontSize: 12, fontWeight: '900' },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.xl,
+    alignSelf: 'flex-start',
+  },
+  text: { fontSize: 12, fontWeight: '800' },
 });

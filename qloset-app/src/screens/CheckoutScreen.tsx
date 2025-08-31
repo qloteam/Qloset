@@ -61,7 +61,7 @@ export default function CheckoutScreen() {
           if (addr) setLine1(addr);
         }
       } catch {
-        // reverse geocode best-effort
+        /* best effort reverse geocode */
       }
 
       Alert.alert(
@@ -96,7 +96,7 @@ export default function CheckoutScreen() {
         body: JSON.stringify(payload),
       });
 
-      // ---- smarter error extraction (shows server "message" like "Location not in serviceable region")
+      // better error message extraction (e.g., “Location not in serviceable region”)
       const data = await res.json().catch(() => ({} as any));
       if (!res.ok || !data.ok) {
         const msg =
@@ -127,7 +127,10 @@ export default function CheckoutScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.h1}>Checkout</Text>
 
           {/* Contact */}
@@ -221,7 +224,6 @@ export default function CheckoutScreen() {
             )}
           </TouchableOpacity>
 
-          {/* bottom spacer so nothing is clipped */}
           <View style={{ height: 24 }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -233,14 +235,14 @@ const styles = StyleSheet.create({
   scroll: {
     padding: 16,
     rowGap: 12,
-    paddingBottom: 32, // important for last items + CTA
+    paddingBottom: 32,
   },
   card: {
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 14,
     gap: 10,
-    elevation: 1, // android subtle shadow
+    elevation: 1,
   },
   h1: { fontSize: 28, fontWeight: '900', marginBottom: 4 },
   section: { fontSize: 16, fontWeight: '800', marginBottom: 6 },

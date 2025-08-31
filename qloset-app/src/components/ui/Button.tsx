@@ -1,53 +1,82 @@
-import * as React from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle, TextStyle, Animated } from 'react-native';
-import { color, radius } from '../../theme/tokens';
+import React from 'react';
+import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, ViewStyle } from 'react-native';
+import { colors, radius } from './colors';
 
 type Props = {
   title: string;
   onPress?: () => void;
+  loading?: boolean;
   disabled?: boolean;
   variant?: 'solid' | 'outline' | 'ghost';
   style?: ViewStyle;
-  textStyle?: TextStyle;
 };
 
-export default function Button({ title, onPress, disabled, variant = 'solid', style, textStyle }: Props) {
-  const scale = React.useRef(new Animated.Value(1)).current;
-  const animate = (to: number) =>
-    Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
-
-  const bg =
-    variant === 'solid' ? { backgroundColor: color.brand } :
-    variant === 'outline' ? { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.text } :
-    { backgroundColor: 'transparent' };
-
-  const txt =
-    variant === 'solid' ? { color: '#fff' } :
-    { color: color.text };
+export default function Button({
+  title,
+  onPress,
+  loading,
+  disabled,
+  variant = 'solid',
+  style,
+}: Props) {
+  const isSolid = variant === 'solid';
+  const isOutline = variant === 'outline';
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable
-        onPress={onPress}
-        android_ripple={{ color: '#ffffff22' }}
-        onPressIn={() => animate(0.98)}
-        onPressOut={() => animate(1)}
-        disabled={disabled}
-        style={[styles.base, bg, disabled && { opacity: 0.5 }, style]}
-      >
-        <Text style={[styles.text, txt, textStyle]}>{title}</Text>
-      </Pressable>
-    </Animated.View>
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={[
+        styles.base,
+        isSolid && styles.solid,
+        isOutline && styles.outline,
+        variant === 'ghost' && styles.ghost,
+        disabled && { opacity: 0.6 },
+        style,
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator color={isSolid ? colors.primaryText : colors.text} />
+      ) : (
+        <Text
+          style={[
+            styles.text,
+            isSolid && { color: colors.primaryText },
+            !isSolid && { color: colors.text },
+          ]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+      )}
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 48,
-    borderRadius: radius.md,
+    height: 48,
     paddingHorizontal: 16,
+    borderRadius: radius.xl,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
   },
-  text: { fontWeight: '800', fontSize: 16 },
+  solid: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  outline: {
+    backgroundColor: 'transparent',
+    borderColor: colors.line,
+  },
+  ghost: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+  },
+  text: {
+    fontWeight: '800',
+    fontSize: 16,
+  },
 });
