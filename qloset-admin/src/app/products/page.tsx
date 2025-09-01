@@ -1,10 +1,29 @@
-export default function ProductsPage() {
+import Link from 'next/link';
+import { listProducts } from '@/lib/api';
+
+export default async function ProductsPage() {
+  const products = await listProducts();
+
   return (
-    <main className="p-6">
-      <h2 className="text-xl font-semibold mb-4">Products</h2>
-      <div className="rounded-xl border bg-white p-4 shadow-sm">
-        <p>List, create, and edit products here (stub).</p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Products</h1>
+        <Link href="/products/new" className="px-3 py-2 rounded bg-black text-white">+ New</Link>
       </div>
-    </main>
+
+      <div className="border rounded divide-y">
+        {products.map(p => (
+          <div key={p.id} className="p-3 flex items-center justify-between">
+            <div>
+              <div className="font-medium">{p.title}</div>
+              <div className="text-sm text-gray-500">{p.variants.length} variants • ₹{p.priceSale}</div>
+            </div>
+            <div className="flex gap-2">
+              <Link href={`/products/${p.id}`} className="px-3 py-1 rounded border">Edit</Link>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

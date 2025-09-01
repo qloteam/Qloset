@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  phone     String    @unique
+  id           String    @id @default(cuid())
+  phone        String    @unique
   email        String?   @unique
   passwordHash String?
-  name      String?
-  addresses Address[]
-  orders    Order[]
-  createdAt DateTime  @default(now())
+  name         String?
+  role         UserRole  @default(CUSTOMER)
+  addresses    Address[]
+  orders       Order[]
+  createdAt    DateTime  @default(now())
 }
 
 model Address {
@@ -28,6 +29,7 @@ model Address {
   pincode   String
   lat       Float?
   lng       Float?
+  orders    Order[]
   createdAt DateTime @default(now())
 }
 
@@ -71,22 +73,24 @@ model Variant {
 }
 
 model Order {
-  id        String      @id @default(cuid())
-  user      User        @relation(fields: [userId], references: [id])
-  userId    String
-  items     OrderItem[]
+  id     String      @id @default(cuid())
+  user   User        @relation(fields: [userId], references: [id])
+  userId String
+  items  OrderItem[]
+
   addressId String
+  address   Address @relation(fields: [addressId], references: [id]) // <-- Add this relation
+
   subtotal  Int
   fees      Int         @default(0)
   discount  Int         @default(0)
   tax       Int         @default(0)
-
-  status OrderStatus @default(PENDING)
+  courierId String?
+  status    OrderStatus @default(PENDING)
 
   paymentStatus String  @default("pending")
   tbyb          Boolean @default(false)
 
-  // New reservations relation (once)
   reservations StockReservation[]
 
   createdAt DateTime @default(now())
@@ -112,6 +116,12 @@ model DeliverySlot {
   windowEnd   DateTime
   capacity    Int
   bookedCount Int      @default(0)
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  COURIER
 }
 
 enum OrderStatus {
