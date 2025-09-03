@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 // Contexts
 import { CartProvider } from './src/state/CartContext';
 import { ThemeProvider } from './src/state/ThemeContext';
+import { AuthProvider } from './src/contexts/AuthContext'; // <- add this (adjust path if you saved it elsewhere)
 
 // Screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -79,16 +80,18 @@ function Tabs() {
 // ✅ Root stack (MainTabs + product/checkout)
 export default function App() {
   return (
-    <CartProvider>
-      <ThemeProvider>
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="MainTabs" component={Tabs} />
-            <Stack.Screen name="Product" component={ProductScreen} />
-            <Stack.Screen name="Checkout" component={CheckoutScreen} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </ThemeProvider>
-    </CartProvider>
+    <AuthProvider>
+      <CartProvider>
+        <ThemeProvider>
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="MainTabs" component={Tabs} />
+              <Stack.Screen name="Product" component={ProductScreen} />
+              <Stack.Screen name="Checkout" component={CheckoutScreen} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </ThemeProvider>
+      </CartProvider>
+    </AuthProvider>
   );
 }

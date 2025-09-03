@@ -10,34 +10,66 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../components/ui/colors';
 import ProductCard from '../components/ui/ProductCard';
-import { listProducts } from '../lib/api';
+import { listProducts, type Product as ApiProduct } from '../lib/api';
 
-type Product = {
+// ===== UI product shape expected by this screen/components =====
+type UiProduct = {
   id: string;
   title: string;
-  priceMrp: number;
-  priceSale: number;
+  priceMrp?: number;
+  priceSale?: number;
   images: string[];
-  // the next three help with best-effort gender detection; they may or may not exist
+  // optional fields used by inferGender:
   description?: string | null;
   brand?: string | null;
   color?: string | null;
+  gender?: string | null;
+};
+
+// Normalize whatever the API returns → UiProduct (non-breaking)
+const toUiProduct = (p: ApiProduct): UiProduct => {
+  const anyP = p as any;
+  return {
+    id:
+      anyP.id ??
+      anyP._id ??
+      String(anyP.sku ?? anyP.slug ?? Math.random()),
+    title: anyP.title ?? anyP.name ?? 'Untitled',
+    priceMrp:
+      anyP.priceMrp ??
+      anyP.mrp ??
+      anyP.price ??
+      anyP.prices?.mrp ??
+      undefined,
+    priceSale:
+      anyP.priceSale ??
+      anyP.salePrice ??
+      anyP.discountPrice ??
+      anyP.prices?.sale ??
+      undefined,
+    images: Array.isArray(anyP.images)
+      ? anyP.images
+      : anyP.image
+      ? [anyP.image]
+      : [],
+    description: anyP.description ?? null,
+    brand: anyP.brand ?? null,
+    color: anyP.color ?? null,
+    gender: anyP.gender ?? anyP.category?.gender ?? null,
+  };
 };
 
 const GENDERS = ['Women', 'Men'] as const;
 type Gender = (typeof GENDERS)[number];
 
 // --- best-effort gender classification without changing backend data
-function inferGender(p: Product): Gender {
-  const hay =
-    `${p.title} ${p.brand ?? ''} ${p.color ?? ''} ${p.description ?? ''}`
-      .toLowerCase();
+function inferGender(p: UiProduct): Gender {
+  if (p.gender?.toLowerCase() === 'men') return 'Men';
+  if (p.gender?.toLowerCase() === 'women') return 'Women';
 
-  if (
-    hay.includes("men's") ||
-    hay.includes('mens') ||
-    hay.includes(' men ')
-  ) {
+  const hay = `${p.title} ${p.brand ?? ''} ${p.color ?? ''} ${p.description ?? ''}`.toLowerCase();
+
+  if (hay.includes("men's") || hay.includes('mens') || hay.includes(' men ')) {
     return 'Men';
   }
   // default to Women to match catalogue focus
@@ -47,7 +79,7 @@ function inferGender(p: Product): Gender {
 export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [gender, setGender] = React.useState<Gender>('Women');
-  const [all, setAll] = React.useState<Product[]>([]);
+  const [all, setAll] = React.useState<UiProduct[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -55,8 +87,12 @@ export default function HomeScreen({ navigation }: any) {
     (async () => {
       try {
         setLoading(true);
-        const items = await listProducts(); // ← existing API
-        if (mounted) setAll(items ?? []);
+        const apiItems: ApiProduct[] = await listProducts();
+        const uiItems = (apiItems ?? []).map(toUiProduct);
+        if (mounted) setAll(uiItems);
+      } catch (e) {
+        console.log('[Home] products load error:', e);
+        if (mounted) setAll([]);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -113,7 +149,7 @@ export default function HomeScreen({ navigation }: any) {
           contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 12 }}
           renderItem={({ item }) => (
             <ProductCard
-              item={item}
+              item={item as any} // ProductCard expects the UiProduct shape
               onPress={() => navigation.navigate('Product', { id: item.id })}
             />
           )}

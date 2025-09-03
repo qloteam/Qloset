@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
-import { JwtAuthGuard } from '../auth/jwt.guard';
+import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 
 /** DTOs kept extremely light; service computes amounts */
 type CreateOrderItemDto = {
@@ -35,7 +35,7 @@ export class OrdersController {
    * Create order (customer)
    * Requires auth (req.user.id)
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(SupabaseAuthGuard)
   @Post()
   async create(@Req() req: any, @Body() body: CreateOrderDto) {
     const userId: string | undefined = req?.user?.id;
@@ -111,7 +111,7 @@ export class OrdersController {
    * Courier: list my orders
    * Requires auth (req.user.id used as courierId)
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(SupabaseAuthGuard)
   @Get('courier/my')
   async listForCourier(@Req() req: any) {
     const courierId: string | undefined = req?.user?.id;
