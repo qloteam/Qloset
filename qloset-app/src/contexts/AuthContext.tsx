@@ -86,11 +86,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function logout() {
-    if (notConfigured) return;
-    setError(null);
-    const { error } = await supabase!.auth.signOut();
-    if (error) throw new Error(error.message);
+  if (notConfigured) return;
+  setError(null);
+  setLoading(true);                // show brief spinner
+  try {
+    await supabase!.auth.signOut(); // clears Supabase session + AsyncStorage
+    // Clear in-memory state immediately so UI flips to logged-out
+    setSession(null);
+    setUser(null);
+  } catch (e: any) {
+    setError(e?.message || "Failed to sign out");
+  } finally {
+    setLoading(false);             // always stop loading
   }
+}
+
 
   const value = useMemo<AuthState>(
     () => ({

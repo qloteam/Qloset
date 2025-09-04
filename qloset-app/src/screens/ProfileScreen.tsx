@@ -13,7 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../contexts/AuthContext";
-import { hasSupabaseConfig } from "@/lib/supabaseClient";
+import { supabase, hasSupabaseConfig } from "@/lib/supabaseClient";
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -45,6 +45,10 @@ export default function ProfileScreen() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+
 
   async function onPasswordLogin() {
     if (!email || !password) {
@@ -81,6 +85,57 @@ export default function ProfileScreen() {
       setBusy(false);
     }
   }
+
+async function onSignUp() {
+  // ✅ Validate BEFORE enabling spinner
+  if (!name || !email || !password) {
+    setMsg("Please enter name, email and password.");
+    return;
+  }
+  if (!/\S+@\S+\.\S+/.test(email)) {
+    setMsg("Enter a valid email address.");
+    return;
+  }
+  if (password.length < 6) {
+    setMsg("Password must be at least 6 characters.");
+    return;
+  }
+
+  setMsg(null);
+  setBusy(true);
+  try {
+    const { data, error } = await supabase!.auth.signUp({
+      email: email.trim(),
+      password,
+      options: { data: { name, phone } },
+    });
+    if (error) throw error;
+
+    if (data.user?.email_confirmed_at) {
+      setMsg("Account created and signed in.");
+    } else {
+      setMsg("Signup successful! Please check your email to verify your account.");
+    }
+
+    setTimeout(() => {
+      setShowLogin(false);
+      setMode("login");
+      setName(""); setPhone(""); setEmail(""); setPassword("");
+      setMsg(null);
+    }, 800);
+  } catch (e: any) {
+    if (e?.message?.includes("User already registered")) {
+      setMsg("This email is already registered. Please sign in instead.");
+      setMode("login"); // auto-switch to login form
+    } else {
+      setMsg(e?.message || "Signup failed.");
+    }
+  } finally {
+    setBusy(false); // ✅ always clear spinner
+  }
+}
+
+
 
   function getDisplayName() {
     const nameFromMeta =
@@ -125,9 +180,22 @@ export default function ProfileScreen() {
                     <Text style={styles.subtext}>{wishlistCount} in wishlist</Text>
                   </View>
                 </View>
-                <TouchableOpacity onPress={logout} style={styles.signOutBtn}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    setBusy(true); // optional: spinner
+                    try {
+                      await logout();
+                    } finally {
+                      setBusy(false);
+                      setMode("login");     // make sure we show login fields
+                      setShowLogin(true);   // immediately open modal
+                    }
+                  }}
+                  style={styles.signOutBtn}
+                >
                   <Text style={styles.signOutText}>Sign out</Text>
                 </TouchableOpacity>
+
               </View>
             ) : (
               // Not logged in → **only CTA**, no fields
@@ -203,25 +271,53 @@ export default function ProfileScreen() {
             <Text style={styles.footerText}>Fashion delivered in 60 minutes</Text>
           </View>
 
-          {/* ===== Login Modal (shown only after CTA tap) ===== */}
-          <Modal visible={showLogin} transparent animationType="fade" onRequestClose={() => setShowLogin(false)}>
+          {/* ===== Auth Modal (Login or Sign Up) ===== */}
+          <Modal
+            visible={showLogin}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowLogin(false)}
+          >
             <View style={styles.modalBackdrop}>
               <View style={styles.modalCard}>
+                {/* Header */}
                 <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
                   <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700", flex: 1 }}>
-                    Sign in
+                    {mode === "login" ? "Sign in" : "Create account"}
                   </Text>
                   <TouchableOpacity onPress={() => setShowLogin(false)} hitSlop={10}>
                     <Ionicons name="close" size={22} color="#bbb" />
                   </TouchableOpacity>
                 </View>
 
-                {msg && <Text style={styles.errorText}>{msg}</Text>}
+                {msg ? <Text style={styles.errorText}>{msg}</Text> : null}
 
                 <View style={{ marginTop: 8, gap: 10 }}>
+                  {/* Extra fields only for Sign Up */}
+                  {mode === "signup" && (
+                    <>
+                      <TextInput
+                        value={name}
+                        onChangeText={(t) => { setName(t); if (msg) setMsg(null); }}
+                        placeholder="Your name"
+                        placeholderTextColor="#7a7a7a"
+                        style={styles.input}
+                      />
+                      <TextInput
+                        value={phone}
+                        onChangeText={(t) => { setPhone(t); if (msg) setMsg(null); }}
+                        keyboardType="phone-pad"
+                        placeholder="Phone (optional)"
+                        placeholderTextColor="#7a7a7a"
+                        style={styles.input}
+                      />
+                    </>
+                  )}
+
+                  {/* Shared fields */}
                   <TextInput
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(t) => { setEmail(t); if (msg) setMsg(null); }}
                     placeholder="you@example.com"
                     placeholderTextColor="#7a7a7a"
                     keyboardType="email-address"
@@ -231,7 +327,7 @@ export default function ProfileScreen() {
                   />
                   <TextInput
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={(t) => { setPassword(t); if (msg) setMsg(null); }}
                     placeholder="••••••••"
                     placeholderTextColor="#7a7a7a"
                     secureTextEntry
@@ -240,47 +336,73 @@ export default function ProfileScreen() {
                     style={styles.input}
                   />
 
+                  {/* Primary action */}
                   <TouchableOpacity
-                    onPress={onPasswordLogin}
+                    onPress={mode === "login" ? onPasswordLogin : onSignUp}
                     disabled={busy}
-                    style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+                    style={[styles.primaryBtn, { marginTop: 10 }, busy && { opacity: 0.6 }]}
                   >
                     {busy ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={styles.primaryBtnText}>Sign in</Text>
+                      <Text style={styles.primaryBtnText}>
+                        {mode === "login" ? "Sign in" : "Sign up"}
+                      </Text>
                     )}
                   </TouchableOpacity>
 
-                  <View style={styles.orRow}>
-                    <View style={styles.orLine} />
-                    <Text style={styles.orText}>OR</Text>
-                    <View style={styles.orLine} />
-                  </View>
+                  {/* Extra options only in Login mode */}
+                  {mode === "login" && (
+                    <>
+                      <View style={styles.orRow}>
+                        <View style={styles.orLine} />
+                        <Text style={styles.orText}>OR</Text>
+                        <View style={styles.orLine} />
+                      </View>
 
-                  <TouchableOpacity
-                    onPress={onMagicLink}
-                    disabled={busy}
-                    style={[styles.secondaryBtn, busy && { opacity: 0.6 }]}
-                  >
-                    <Text style={styles.secondaryBtnText}>Email me a magic link</Text>
-                  </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={onMagicLink}
+                        disabled={busy}
+                        style={[styles.secondaryBtn, busy && { opacity: 0.6 }]}
+                      >
+                        <Text style={styles.secondaryBtnText}>Email me a magic link</Text>
+                      </TouchableOpacity>
 
+                      <TouchableOpacity
+                        onPress={() =>
+                          loginWithGoogle().catch((e) =>
+                            Alert.alert("Google sign-in", e?.message || "Failed to sign in")
+                          )
+                        }
+                        disabled={busy}
+                        style={[styles.secondaryBtn, busy && { opacity: 0.6 }]}
+                      >
+                        <Text style={styles.secondaryBtnText}>Continue with Google</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+
+                  {/* Mode switch (EXACTLY ONE of these exists) */}
                   <TouchableOpacity
                     onPress={() => {
-                      loginWithGoogle().catch((e) => {
-                        Alert.alert("Google sign-in", e?.message || "Failed to sign in");
-                      });
+                      setMsg(null);
+                      setMode(mode === "login" ? "signup" : "login");
                     }}
                     disabled={busy}
-                    style={[styles.secondaryBtn, busy && { opacity: 0.6 }]}
+                    style={[styles.secondaryBtn, { marginTop: 10 }]}
                   >
-                    <Text style={styles.secondaryBtnText}>Continue with Google</Text>
+                    <Text style={styles.secondaryBtnText}>
+                      {mode === "login" ? "Create a new account" : "I already have an account"}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
             </View>
           </Modal>
+          {/* ===== End Auth Modal ===== */}
+
+
+
         </>
       )}
     </ScrollView>
