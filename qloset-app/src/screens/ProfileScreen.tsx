@@ -14,13 +14,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase, hasSupabaseConfig } from "@/lib/supabaseClient";
+import { useCart } from "../state/CartContext";
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const { user, loading, loginWithPassword, loginWithGoogle, sendMagicLink, logout } = useAuth();
 
   // demo counts — replace with real data when you wire your API
-  const cartCount = 2;
+  const { count } = useCart();
   const wishlistCount = 5;
 
   const profileMenuItems = [
@@ -176,9 +177,12 @@ async function onSignUp() {
                   <Text style={styles.welcome}>Welcome back, {getDisplayName()}!</Text>
                   <Text style={styles.subtext}>{user.email}</Text>
                   <View style={styles.stats}>
-                    <Text style={styles.subtext}>{cartCount} items in bag</Text>
+                    <Text style={styles.subtext}>
+                      {count} {count === 1 ? "item" : "items"} in bag
+                    </Text>
                     <Text style={styles.subtext}>{wishlistCount} in wishlist</Text>
                   </View>
+
                 </View>
                 <TouchableOpacity
                   onPress={async () => {

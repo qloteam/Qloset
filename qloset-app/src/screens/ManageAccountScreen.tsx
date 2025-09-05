@@ -7,38 +7,83 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useAuth } from "../contexts/AuthContext";
+import { fetchProfile, saveProfile as saveProfileToDb } from "../db/profile";
+import { supabase } from "../lib/supabaseClient";
+
 export default function ManageAccountScreen() {
+  const { user, logout } = useAuth();
+
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
+  // Load existing profile from DB (or fall back to auth metadata)
   useEffect(() => {
+    let cancel = false;
     (async () => {
-      const storedName = await AsyncStorage.getItem("userName");
-      const storedPhone = await AsyncStorage.getItem("userPhone");
-      const storedEmail = await AsyncStorage.getItem("userEmail");
-      if (storedName) setName(storedName);
-      if (storedPhone) setPhone(storedPhone);
-      if (storedEmail) setEmail(storedEmail);
+      if (!user) return;
+
+      const prof = await fetchProfile(user.id);
+      if (cancel) return;
+
+      if (prof) {
+        setName(prof.name ?? "");
+        setPhone(prof.phone ?? "");
+        setEmail(prof.email ?? user.email ?? "");
+      } else {
+        // Fallback to auth metadata if the row doesn't exist yet
+        // @ts-ignore
+        const metaName = user.user_metadata?.full_name || user.user_metadata?.name || "";
+        // @ts-ignore
+        const metaPhone = user.user_metadata?.phone || "";
+        setName(metaName);
+        setPhone(metaPhone);
+        setEmail(user.email ?? "");
+      }
     })();
-  }, []);
 
-  const saveProfile = async () => {
-    await AsyncStorage.setItem("userName", name);
-    await AsyncStorage.setItem("userPhone", phone);
-    await AsyncStorage.setItem("userEmail", email);
-    setEditing(false);
-    Alert.alert("Saved", "Your profile has been updated");
-  };
+    return () => {
+      cancel = true;
+    };
+  }, [user]);
 
-  const logout = async () => {
-    await AsyncStorage.clear();
-    Alert.alert("Logged out", "You have been logged out.");
-  };
+  // Save handler -> upsert to Supabase
+  async function onSave() {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await saveProfileToDb(user.id, {
+        name: name || null,
+        phone: phone || null,
+        email: email || user.email || null,
+      });
+
+      // Optional: mirror to auth metadata so other parts of the app can read it
+      await supabase?.auth.updateUser({
+        data: { full_name: name, phone },
+      });
+
+      setEditing(false);
+      Alert.alert("Saved", "Your profile has been updated.");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Could not save profile.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onLogout() {
+    try {
+      await logout(); // use your AuthContext logout
+    } catch (e: any) {
+      Alert.alert("Logout", e?.message || "Failed to log out");
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -81,14 +126,19 @@ export default function ManageAccountScreen() {
           placeholder="Email"
           placeholderTextColor="#777"
           keyboardType="email-address"
+          autoCapitalize="none"
           onChangeText={setEmail}
         />
       </View>
 
       {/* Edit / Save */}
       {editing ? (
-        <TouchableOpacity style={styles.button} onPress={saveProfile}>
-          <Text style={styles.buttonText}>Save Changes</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={onSave}
+          disabled={saving}
+        >
+          <Text style={styles.buttonText}>{saving ? "Saving..." : "Save Changes"}</Text>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
@@ -102,7 +152,7 @@ export default function ManageAccountScreen() {
       {/* Logout */}
       <TouchableOpacity
         style={[styles.button, { marginTop: 20, backgroundColor: "rgba(255,51,102,0.1)" }]}
-        onPress={logout}
+        onPress={onLogout}
       >
         <Text style={[styles.buttonText, { color: "#FF3366" }]}>Logout</Text>
       </TouchableOpacity>
