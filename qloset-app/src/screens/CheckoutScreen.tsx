@@ -14,6 +14,9 @@ import {
 import * as Location from 'expo-location';
 import { useCart } from '../state/CartContext';
 import { API_BASE } from '../lib/api';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
+
 
 export default function CheckoutScreen() {
   const { items, total, clear } = useCart();
@@ -30,6 +33,47 @@ export default function CheckoutScreen() {
 
   const [loading, setLoading] = React.useState(false);
   const [locLoading, setLocLoading] = React.useState(false);
+
+  
+
+  // Saved addresses from Profile
+type SavedAddress = {
+  id: string;
+  label?: string | null;
+  line1: string;
+  line2?: string | null;
+  pincode: string;
+  is_default?: boolean | null;
+};
+
+const { user } = useAuth();
+const [addresses, setAddresses] = React.useState<SavedAddress[]>([]);
+const [selectedAddressId, setSelectedAddressId] = React.useState<string | null>(null);
+
+React.useEffect(() => {
+  let mounted = true;
+  async function load() {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('addresses')
+      .select('id,label,line1,line2,pincode,is_default')
+      .eq('user_id', user.id)
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (!mounted) return;
+    if (!error && data) {
+      const list = data as SavedAddress[];
+      setAddresses(list);
+      const def = list.find(a => a.is_default);
+      setSelectedAddressId(def?.id ?? list[0]?.id ?? null);
+    }
+  }
+  load();
+  return () => { mounted = false; };
+}, [user]);
+
+
 
   const useMyLocation = async () => {
     try {
@@ -87,6 +131,7 @@ export default function CheckoutScreen() {
       const payload = {
         userPhone: phone,
         tbyb,
+        addressId: selectedAddressId,
         address: { name, phone, line1, landmark, pincode, lat, lng },
         items: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
       };
@@ -154,6 +199,64 @@ export default function CheckoutScreen() {
           {/* Address */}
           <View style={styles.card}>
             <Text style={styles.section}>Address</Text>
+            {user && addresses.length > 0 ? (
+  <View style={{ marginBottom: 8 }}>
+    <Text style={{ fontWeight: '700', fontSize: 14, marginBottom: 8 }}>
+      Use this address
+    </Text>
+
+    {addresses.map((a) => {
+      const selected = selectedAddressId === a.id;
+      return (
+        <TouchableOpacity
+          key={a.id}
+          onPress={() => setSelectedAddressId(a.id)}
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            borderWidth: selected ? 2 : 1,
+            borderColor: selected ? '#111827' : '#E5E7EB',
+            backgroundColor: selected ? '#111827' : '#F3F4F6',
+            marginBottom: 10,
+          }}
+        >
+          <Text style={{ fontWeight: '700', color: selected ? 'white' : 'black' }}>
+            {a.label ? `${a.label} — ` : ''}{a.line1}
+          </Text>
+          {a.line2 ? (
+            <Text style={{ color: selected ? 'white' : 'black' }}>{a.line2}</Text>
+          ) : null}
+          <Text style={{ color: selected ? '#D1FAE5' : '#4B5563' }}>{a.pincode}</Text>
+          {a.is_default ? (
+            <Text style={{ color: '#10B981', marginTop: 4 }}>Default</Text>
+          ) : null}
+        </TouchableOpacity>
+      );
+    })}
+
+    <TouchableOpacity
+      onPress={() => {
+        const chosen = addresses.find(x => x.id === selectedAddressId);
+        if (!chosen) return;
+        // Fill your checkout inputs from the selected address:
+        setLine1(chosen.line1 || '');
+        // If you want line2 to show as landmark, uncomment next line:
+        // setLandmark(chosen.line2 || '');
+        setPincode(chosen.pincode || '');
+      }}
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: '#111827',
+        alignItems: 'center',
+        marginBottom: 6,
+      }}
+    >
+      <Text style={{ color: 'white', fontWeight: '800' }}>Use selected address</Text>
+    </TouchableOpacity>
+  </View>
+) : null}
+
             <TextInput
               placeholder="Address line"
               value={line1}
