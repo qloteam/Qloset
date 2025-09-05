@@ -9,7 +9,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 // Contexts
 import { CartProvider } from './src/state/CartContext';
 import { ThemeProvider } from './src/state/ThemeContext';
-import { AuthProvider } from './src/contexts/AuthContext'; // <- add this (adjust path if you saved it elsewhere)
+import { AuthProvider } from './src/contexts/AuthContext';
+import { WishlistProvider } from './src/state/WishlistContext';
 
 // Screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -26,12 +27,13 @@ import AddressesScreen from './src/screens/AddressesScreen';
 import OffersScreen from './src/screens/OffersScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import PrivacyScreen from './src/screens/PrivacyScreen';
+import WishlistScreen from './src/screens/WishlistScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 const ProfileStackNav = createNativeStackNavigator();
 
-// ✅ Profile stack (Profile + sub-pages)
+// ✅ Profile stack
 function ProfileStack() {
   return (
     <ProfileStackNav.Navigator>
@@ -46,6 +48,7 @@ function ProfileStack() {
       <ProfileStackNav.Screen name="Offers" component={OffersScreen} />
       <ProfileStackNav.Screen name="Terms" component={TermsScreen} />
       <ProfileStackNav.Screen name="Privacy" component={PrivacyScreen} />
+      <ProfileStackNav.Screen name="Wishlist" component={WishlistScreen} />
     </ProfileStackNav.Navigator>
   );
 }
@@ -83,13 +86,15 @@ export default function App() {
     <AuthProvider>
       <CartProvider>
         <ThemeProvider>
-          <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="MainTabs" component={Tabs} />
-              <Stack.Screen name="Product" component={ProductScreen} />
-              <Stack.Screen name="Checkout" component={CheckoutScreen} />
-            </Stack.Navigator>
-          </NavigationContainer>
+          <WishlistProvider>
+            <NavigationContainer>
+              <Stack.Navigator screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="MainTabs" component={Tabs} />
+                <Stack.Screen name="Product" component={ProductScreen} />
+                <Stack.Screen name="Checkout" component={CheckoutScreen} />
+              </Stack.Navigator>
+            </NavigationContainer>
+          </WishlistProvider>
         </ThemeProvider>
       </CartProvider>
     </AuthProvider>
