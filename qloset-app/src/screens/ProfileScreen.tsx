@@ -1,3 +1,4 @@
+// src/screens/ProfileScreen.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -13,34 +14,24 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase, hasSupabaseConfig } from "@/lib/supabaseClient";
+import { supabase, hasSupabaseConfig } from "../lib/supabaseClient";
 import { useCart } from "../state/CartContext";
+import { useWishlist } from "../state/WishlistContext";
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
+
+  // Auth
   const { user, loading, loginWithPassword, loginWithGoogle, sendMagicLink, logout } = useAuth();
 
-  // demo counts — replace with real data when you wire your API
+  // Cart summary
   const { count } = useCart();
-  const wishlistCount = 5;
 
-  const profileMenuItems = [
-    { icon: "bag-handle-outline", title: "My Orders", subtitle: "Track your orders" },
-    { icon: "help-circle-outline", title: "Help & Query", subtitle: "Get support" },
-    { icon: "heart-outline", title: "Wishlist", subtitle: `${wishlistCount} items saved` },
-    { icon: "gift-outline", title: "Refer & Earn", subtitle: "Invite friends & get rewards" },
-  ];
+  // Wishlist summary (single source of truth)
+  const { wishlist, hydrated: wlHydrated } = useWishlist();
+  const wishlistCount = wlHydrated ? wishlist.length : 0;
 
-  const settingsMenuItems = [
-    { icon: "color-palette-outline", title: "Appearance", subtitle: "Dark mode, themes", screen: "Appearance" },
-    { icon: "person-circle-outline", title: "Manage Account", subtitle: "Profile, preferences", screen: "ManageAccount" },
-    { icon: "location-outline", title: "Addresses", subtitle: "Manage delivery addresses", screen: "Addresses" },
-    { icon: "pricetag-outline", title: "My Offers", subtitle: "Coupons & discounts", screen: "Offers" },
-    { icon: "document-text-outline", title: "Terms & Conditions", subtitle: "Legal information", screen: "Terms" },
-    { icon: "shield-checkmark-outline", title: "Privacy Policy", subtitle: "Data & privacy", screen: "Privacy" },
-  ];
-
-  // ---- Login UI state (hidden until CTA tapped) ----
+  // ---- Login UI state ----
   const [showLogin, setShowLogin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,7 +40,6 @@ export default function ProfileScreen() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-
 
   async function onPasswordLogin() {
     if (!email || !password) {
@@ -87,75 +77,91 @@ export default function ProfileScreen() {
     }
   }
 
-async function onSignUp() {
-  // ✅ Validate BEFORE enabling spinner
-  if (!name || !email || !password) {
-    setMsg("Please enter name, email and password.");
-    return;
-  }
-  if (!/\S+@\S+\.\S+/.test(email)) {
-    setMsg("Enter a valid email address.");
-    return;
-  }
-  if (password.length < 6) {
-    setMsg("Password must be at least 6 characters.");
-    return;
-  }
-
-  setMsg(null);
-  setBusy(true);
-  try {
-    const { data, error } = await supabase!.auth.signUp({
-      email: email.trim(),
-      password,
-      options: { data: { name, phone } },
-    });
-    if (error) throw error;
-
-    if (data.user?.email_confirmed_at) {
-      setMsg("Account created and signed in.");
-    } else {
-      setMsg("Signup successful! Please check your email to verify your account.");
+  async function onSignUp() {
+    if (!name || !email || !password) {
+      setMsg("Please enter name, email and password.");
+      return;
+    }
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setMsg("Enter a valid email address.");
+      return;
+    }
+    if (password.length < 6) {
+      setMsg("Password must be at least 6 characters.");
+      return;
     }
 
-    setTimeout(() => {
-      setShowLogin(false);
-      setMode("login");
-      setName(""); setPhone(""); setEmail(""); setPassword("");
-      setMsg(null);
-    }, 800);
-  } catch (e: any) {
-    if (e?.message?.includes("User already registered")) {
-      setMsg("This email is already registered. Please sign in instead.");
-      setMode("login"); // auto-switch to login form
-    } else {
-      setMsg(e?.message || "Signup failed.");
+    setMsg(null);
+    setBusy(true);
+    try {
+      const { data, error } = await supabase!.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { data: { name, phone } },
+      });
+      if (error) throw error;
+
+      if (data.user?.email_confirmed_at) {
+        setMsg("Account created and signed in.");
+      } else {
+        setMsg("Signup successful! Please check your email to verify your account.");
+      }
+
+      setTimeout(() => {
+        setShowLogin(false);
+        setMode("login");
+        setName("");
+        setPhone("");
+        setEmail("");
+        setPassword("");
+        setMsg(null);
+      }, 800);
+    } catch (e: any) {
+      if (e?.message?.includes("User already registered")) {
+        setMsg("This email is already registered. Please sign in instead.");
+        setMode("login");
+      } else {
+        setMsg(e?.message || "Signup failed.");
+      }
+    } finally {
+      setBusy(false);
     }
-  } finally {
-    setBusy(false); // ✅ always clear spinner
   }
-}
-
-
 
   function getDisplayName() {
-    const nameFromMeta =
-      // @ts-ignore
-      (user?.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || "";
+    // @ts-ignore
+    const nameFromMeta = (user?.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || "";
     return nameFromMeta || (user?.email ? user.email.split("@")[0] : "User");
   }
 
+  const profileMenuItems = [
+    { icon: "bag-handle-outline", title: "My Orders", subtitle: "Track your orders" },
+    { icon: "help-circle-outline", title: "Help & Query", subtitle: "Get support" },
+    {
+      icon: "heart-outline",
+      title: "Wishlist",
+      subtitle: `${wishlistCount} ${wishlistCount === 1 ? "item" : "items"} saved`,
+      screen: "Wishlist",
+    },
+    { icon: "gift-outline", title: "Refer & Earn", subtitle: "Invite friends & get rewards" },
+  ];
+
+  const settingsMenuItems = [
+    { icon: "color-palette-outline", title: "Appearance", subtitle: "Dark mode, themes", screen: "Appearance" },
+    { icon: "person-circle-outline", title: "Manage Account", subtitle: "Profile, preferences", screen: "ManageAccount" },
+    { icon: "location-outline", title: "Addresses", subtitle: "Manage delivery addresses", screen: "Addresses" },
+    { icon: "pricetag-outline", title: "My Offers", subtitle: "Coupons & discounts", screen: "Offers" },
+    { icon: "document-text-outline", title: "Terms & Conditions", subtitle: "Legal information", screen: "Terms" },
+    { icon: "shield-checkmark-outline", title: "Privacy Policy", subtitle: "Data & privacy", screen: "Privacy" },
+  ];
+
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* Config guard */}
       {!hasSupabaseConfig ? (
         <View style={{ padding: 16 }}>
-          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-            Authentication not configured
-          </Text>
+          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>Authentication not configured</Text>
           <Text style={{ color: "#aaa", marginTop: 8 }}>
-            Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to your .env, then
-            restart the app.
+            Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to your .env, then restart the app.
           </Text>
         </View>
       ) : (
@@ -180,29 +186,27 @@ async function onSignUp() {
                     <Text style={styles.subtext}>
                       {count} {count === 1 ? "item" : "items"} in bag
                     </Text>
-                    <Text style={styles.subtext}>{wishlistCount} in wishlist</Text>
+                    <Text style={styles.subtext}>
+                      {wishlistCount} {wishlistCount === 1 ? "like" : "likes"}
+                    </Text>
                   </View>
-
                 </View>
                 <TouchableOpacity
                   onPress={async () => {
-                    setBusy(true); // optional: spinner
                     try {
                       await logout();
                     } finally {
-                      setBusy(false);
-                      setMode("login");     // make sure we show login fields
-                      setShowLogin(true);   // immediately open modal
+                      setMode("login");
+                      setShowLogin(true); // open auth modal after sign-out if you want
                     }
                   }}
                   style={styles.signOutBtn}
                 >
                   <Text style={styles.signOutText}>Sign out</Text>
                 </TouchableOpacity>
-
               </View>
             ) : (
-              // Not logged in → **only CTA**, no fields
+              // Not logged in → CTA
               <View style={styles.box}>
                 <View style={styles.avatarMuted}>
                   <Ionicons name="person" size={22} color="#888" />
@@ -211,10 +215,7 @@ async function onSignUp() {
                   <Text style={styles.loginText}>Sign up / Login</Text>
                   <Text style={styles.subtext}>Access orders, wishlist & more</Text>
 
-                  <TouchableOpacity
-                    onPress={() => setShowLogin(true)}
-                    style={[styles.primaryBtn, { marginTop: 12 }]}
-                  >
+                  <TouchableOpacity onPress={() => setShowLogin(true)} style={[styles.primaryBtn, { marginTop: 12 }]}>
                     <Text style={styles.primaryBtnText}>Continue</Text>
                   </TouchableOpacity>
                 </View>
@@ -229,18 +230,17 @@ async function onSignUp() {
                 <TouchableOpacity
                   key={item.title}
                   style={styles.card}
-                  onPress={() => console.log(`${item.title} tapped`)}
+                  onPress={() => {
+                    // @ts-ignore simple route typing
+                    if ((item as any).screen) navigation.navigate((item as any).screen);
+                    else console.log(`${item.title} tapped`);
+                  }}
                 >
                   <View style={styles.cardHeader}>
                     <View style={styles.iconBox}>
                       <Ionicons name={item.icon as any} size={18} color="#FF3366" />
                     </View>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={16}
-                      color="#aaa"
-                      style={{ marginLeft: "auto" }}
-                    />
+                    <Ionicons name="chevron-forward" size={16} color="#aaa" style={{ marginLeft: "auto" }} />
                   </View>
                   <Text style={styles.cardTitle}>{item.title}</Text>
                   <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
@@ -276,12 +276,7 @@ async function onSignUp() {
           </View>
 
           {/* ===== Auth Modal (Login or Sign Up) ===== */}
-          <Modal
-            visible={showLogin}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowLogin(false)}
-          >
+          <Modal visible={showLogin} transparent animationType="fade" onRequestClose={() => setShowLogin(false)}>
             <View style={styles.modalBackdrop}>
               <View style={styles.modalCard}>
                 {/* Header */}
@@ -302,14 +297,20 @@ async function onSignUp() {
                     <>
                       <TextInput
                         value={name}
-                        onChangeText={(t) => { setName(t); if (msg) setMsg(null); }}
+                        onChangeText={(t) => {
+                          setName(t);
+                          if (msg) setMsg(null);
+                        }}
                         placeholder="Your name"
                         placeholderTextColor="#7a7a7a"
                         style={styles.input}
                       />
                       <TextInput
                         value={phone}
-                        onChangeText={(t) => { setPhone(t); if (msg) setMsg(null); }}
+                        onChangeText={(t) => {
+                          setPhone(t);
+                          if (msg) setMsg(null);
+                        }}
                         keyboardType="phone-pad"
                         placeholder="Phone (optional)"
                         placeholderTextColor="#7a7a7a"
@@ -321,7 +322,10 @@ async function onSignUp() {
                   {/* Shared fields */}
                   <TextInput
                     value={email}
-                    onChangeText={(t) => { setEmail(t); if (msg) setMsg(null); }}
+                    onChangeText={(t) => {
+                      setEmail(t);
+                      if (msg) setMsg(null);
+                    }}
                     placeholder="you@example.com"
                     placeholderTextColor="#7a7a7a"
                     keyboardType="email-address"
@@ -331,7 +335,10 @@ async function onSignUp() {
                   />
                   <TextInput
                     value={password}
-                    onChangeText={(t) => { setPassword(t); if (msg) setMsg(null); }}
+                    onChangeText={(t) => {
+                      setPassword(t);
+                      if (msg) setMsg(null);
+                    }}
                     placeholder="••••••••"
                     placeholderTextColor="#7a7a7a"
                     secureTextEntry
@@ -349,9 +356,7 @@ async function onSignUp() {
                     {busy ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={styles.primaryBtnText}>
-                        {mode === "login" ? "Sign in" : "Sign up"}
-                      </Text>
+                      <Text style={styles.primaryBtnText}>{mode === "login" ? "Sign in" : "Sign up"}</Text>
                     )}
                   </TouchableOpacity>
 
@@ -364,11 +369,7 @@ async function onSignUp() {
                         <View style={styles.orLine} />
                       </View>
 
-                      <TouchableOpacity
-                        onPress={onMagicLink}
-                        disabled={busy}
-                        style={[styles.secondaryBtn, busy && { opacity: 0.6 }]}
-                      >
+                      <TouchableOpacity onPress={onMagicLink} disabled={busy} style={[styles.secondaryBtn, busy && { opacity: 0.6 }]}>
                         <Text style={styles.secondaryBtnText}>Email me a magic link</Text>
                       </TouchableOpacity>
 
@@ -386,7 +387,7 @@ async function onSignUp() {
                     </>
                   )}
 
-                  {/* Mode switch (EXACTLY ONE of these exists) */}
+                  {/* Mode switch */}
                   <TouchableOpacity
                     onPress={() => {
                       setMsg(null);
@@ -404,9 +405,6 @@ async function onSignUp() {
             </View>
           </Modal>
           {/* ===== End Auth Modal ===== */}
-
-
-
         </>
       )}
     </ScrollView>
@@ -456,7 +454,6 @@ const styles = StyleSheet.create({
   subtext: { color: "#aaa", fontSize: 12, marginTop: 2 },
   stats: { flexDirection: "row", gap: 12, marginTop: 6 },
 
-  // Buttons
   primaryBtn: {
     backgroundColor: "#FF3366",
     borderRadius: 10,
@@ -506,6 +503,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: { color: "#fff", fontSize: 13, fontWeight: "500" },
   cardSubtitle: { color: "#aaa", fontSize: 11, marginTop: 2 },
+
   settingsRow: {
     backgroundColor: "#1E1E22",
     borderRadius: 12,
@@ -536,7 +534,6 @@ const styles = StyleSheet.create({
   footer: { alignItems: "center", marginTop: 30, marginBottom: 40 },
   footerText: { color: "#888", fontSize: 12 },
 
-  // Modal styles
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",

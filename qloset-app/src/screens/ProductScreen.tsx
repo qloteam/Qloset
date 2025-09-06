@@ -1,5 +1,5 @@
 // src/screens/ProductScreen.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,12 +9,12 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import { API_BASE } from "../lib/api";
 import Button from "../components/ui/Button";
 import { useCart } from "../state/CartContext";
+import { useWishlist } from "../state/WishlistContext"; // ✅ use the context
 
 type RootStackParamList = {
   Product: { id: string };
@@ -36,48 +36,42 @@ export default function ProductScreen() {
 
   const [p, setP] = useState<Product | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [isWishlisted, setIsWishlisted] = useState(false);
+
+  // ✅ Wishlist context
+  const { wishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
   // ✅ Load product
   useEffect(() => {
     (async () => {
-      const res = await fetch(`${API_BASE}/products/${route.params.id}`);
-      const data = await res.json();
-      setP(data);
-      if (data?.variants?.[0]?.id) setSelected(data.variants[0].id);
-    })();
-  }, [route.params.id]);
-
-  // ✅ Check wishlist state when product opens
-  useEffect(() => {
-    (async () => {
-      const data = await AsyncStorage.getItem("wishlist");
-      if (data) {
-        const list = JSON.parse(data);
-        const exists = list.some((i: any) => i.id === route.params.id);
-        setIsWishlisted(exists);
+      try {
+        const res = await fetch(`${API_BASE}/products/${route.params.id}`);
+        const data = (await res.json()) as Product;
+        setP(data);
+        if (data?.variants?.[0]?.id) setSelected(data.variants[0].id);
+      } catch (e) {
+        console.warn("Failed to load product", e);
       }
     })();
   }, [route.params.id]);
 
-  // ✅ Toggle wishlist
-  const toggleWishlist = async () => {
-    try {
-      const data = await AsyncStorage.getItem("wishlist");
-      let list = data ? JSON.parse(data) : [];
+  // ✅ Derived flag: is this product in wishlist?
+  const isWishlisted = useMemo(
+    () => (p ? wishlist.some((x) => x.id === p.id) : false),
+    [wishlist, p?.id]
+  );
 
-      if (isWishlisted) {
-        // remove
-        list = list.filter((i: any) => i.id !== route.params.id);
-      } else {
-        // add
-        if (p) list.push({ id: p.id, title: p.title, priceSale: p.priceSale, images: p.images });
-      }
-
-      await AsyncStorage.setItem("wishlist", JSON.stringify(list));
-      setIsWishlisted(!isWishlisted);
-    } catch (err) {
-      console.log("Wishlist error:", err);
+  // ✅ Toggle via context (no AsyncStorage here)
+  const toggleWishlist = () => {
+    if (!p) return;
+    if (isWishlisted) {
+      removeFromWishlist(p.id);
+    } else {
+      addToWishlist({
+        id: p.id,
+        title: p.title,
+        priceSale: p.priceSale,
+        images: p.images,
+      });
     }
   };
 
@@ -146,6 +140,7 @@ export default function ProductScreen() {
         <Button
           title="Go to cart"
           variant="outline"
+          // If your tab name is CartTab, use "CartTab" instead of "Cart"
           onPress={() => nav.navigate("Cart" as never)}
         />
 

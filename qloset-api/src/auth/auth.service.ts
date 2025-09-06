@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma.service';
 
+
 type OtpData = { code: string; expiresAt: number; lastSentAt: number };
 const otpStore = new Map<string, OtpData>();
 
@@ -117,10 +118,18 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const user = await this.prisma.user.create({
-      data: { email, passwordHash, name, phone },
-      select: { id: true, email: true, name: true, phone: true },
-    });
+    if (!phone) {
+  throw new BadRequestException('Phone is required');
+}
+
+const user = await this.prisma.user.create({
+  data: {
+    email,
+    passwordHash,
+    name,
+    phone, // safe now
+  },
+});
 
     const token = await this.issueToken(user);
     return { token, user };

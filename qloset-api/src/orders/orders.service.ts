@@ -35,75 +35,82 @@ export class OrdersService {
    * - Decrements stock within the same transaction
    */
   async create(data: CreateOrderDto) {
-    if (!data.items?.length) {
-      throw new BadRequestException('No items in order');
-    }
-
-    // Load all variants in one go (with product for price)
-    const variantIds = [...new Set(data.items.map((i) => i.variantId))];
-    const variants = await this.prisma.variant.findMany({
-      where: { id: { in: variantIds } },
-      include: { product: true },
-    });
-    const byId = new Map(variants.map((v) => [v.id, v]));
-
-    // Validate and prepare nested item creates
-    for (const i of data.items) {
-      const v = byId.get(i.variantId);
-      if (!v) throw new BadRequestException(`Invalid variant: ${i.variantId}`);
-      if (i.qty <= 0)
-        throw new BadRequestException(`Invalid qty for ${i.variantId}`);
-      if (v.stockQty < i.qty) {
-        throw new BadRequestException(
-          `Insufficient stock for ${v.sku ?? v.id} (have ${v.stockQty}, need ${i.qty})`,
-        );
-      }
-    }
-
-    const itemCreates = data.items.map((i) => {
-      const v = byId.get(i.variantId)!;
-      const price =
-        (v.product as any)?.priceSale ?? (v.product as any)?.priceMrp ?? 0;
-
-      return {
-        variantId: i.variantId, // <— scalar (unchecked) path
-        qty: i.qty,
-        price,
-      };
-    });
-
-    // Create order + decrement stock atomically
-    const [order] = await this.prisma.$transaction([
-      this.prisma.order.create({
-        data: {
-          userId: data.userId, // <— scalar
-          addressId: data.addressId, // <— scalar
-          items: { create: itemCreates },
-          subtotal: data.subtotal,
-          fees: data.fees ?? 0,
-          discount: data.discount ?? 0,
-          tax: data.tax ?? 0,
-          status: 'PENDING',
-          tbyb: data.tbyb ?? false,
-        },
-        include: {
-          items: { include: { variant: true } },
-          user: true,
-          address: true,
-        },
-      }),
-
-      // Decrement stock for each line item
-      ...data.items.map((i) =>
-        this.prisma.variant.update({
-          where: { id: i.variantId },
-          data: { stockQty: { decrement: i.qty } },
-        }),
-      ),
-    ]);
-
-    return order;
+  if (!data.items?.length) {
+    throw new BadRequestException('No items in order');
   }
+
+  // Load all variants in one go (with product for price)
+  const variantIds = [...new Set(data.items.map((i) => i.variantId))];
+  const variants = await this.prisma.variant.findMany({
+    where: { id: { in: variantIds } },
+    include: { product: true },
+  });
+  const byId = new Map(variants.map((v) => [v.id, v]));
+
+  // Validate and prepare nested item creates
+  for (const i of data.items) {
+    const v = byId.get(i.variantId);
+    if (!v) throw new BadRequestException(`Invalid variant: ${i.variantId}`);
+    if (i.qty <= 0) throw new BadRequestException(`Invalid qty for ${i.variantId}`);
+    if (v.stockQty < i.qty) {
+      throw new BadRequestException(
+        `Insufficient stock for ${v.sku ?? v.id} (have ${v.stockQty}, need ${i.qty})`,
+      );
+    }
+  }
+
+  const itemCreates = data.items.map((i) => {
+    const v = byId.get(i.variantId)!;
+    const price =
+      (v.product as any)?.priceSale ?? (v.product as any)?.priceMrp ?? 0;
+
+    return {
+      variantId: i.variantId,
+      qty: i.qty,
+      price,
+    };
+  });
+
+  // --- NEW: ensure subtotal is always a number ---
+  const computedSubtotal = itemCreates.reduce((sum, it) => sum + it.price * it.qty, 0);
+  const subtotal = data.subtotal ?? computedSubtotal;
+  const fees = data.fees ?? 0;
+  const discount = data.discount ?? 0;
+  const tax = data.tax ?? 0;
+  const tbyb = data.tbyb ?? false;
+
+  // Create order + decrement stock atomically
+  const [order] = await this.prisma.$transaction([
+    this.prisma.order.create({
+      data: {
+        userId: data.userId,
+        addressId: data.addressId,
+        items: { create: itemCreates },
+        subtotal,             // <-- guaranteed number now
+        fees,
+        discount,
+        tax,
+        status: OrderStatus.PENDING, // (optional) enum instead of string
+        tbyb,
+      },
+      include: {
+        items: { include: { variant: true } },
+        user: true,
+        address: true,
+      },
+    }),
+
+    // Decrement stock for each line item
+    ...data.items.map((i) =>
+      this.prisma.variant.update({
+        where: { id: i.variantId },
+        data: { stockQty: { decrement: i.qty } },
+      }),
+    ),
+  ]);
+
+  return order;
+}
 
   /**
    * Admin: list all orders
