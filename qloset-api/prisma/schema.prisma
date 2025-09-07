@@ -5,6 +5,8 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // allow cross-schema FKs to Supabase's auth schema
+  schemas  = ["public", "auth"]
 }
 
 model User {
@@ -17,6 +19,8 @@ model User {
   role         UserRole  @default(CUSTOMER)
   addresses    Address[]
   orders       Order[]
+
+  @@schema("public")
 }
 
 model Address {
@@ -31,6 +35,8 @@ model Address {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
   orders    Order[]
+
+  @@schema("public")
 }
 
 model Otp {
@@ -43,6 +49,7 @@ model Otp {
   createdAt  DateTime @default(now())
 
   @@index([expiresAt])
+  @@schema("public")
 }
 
 model Product {
@@ -58,6 +65,8 @@ model Product {
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
   variants    Variant[]
+
+  @@schema("public")
 }
 
 model Variant {
@@ -69,6 +78,8 @@ model Variant {
   OrderItem    OrderItem[]
   reservations StockReservation[]
   product      Product            @relation(fields: [productId], references: [id])
+
+  @@schema("public")
 }
 
 model Order {
@@ -90,6 +101,8 @@ model Order {
   items         OrderItem[]
   reservations  StockReservation[]
   TbybSession   TbybSession[]
+
+  @@schema("public")
 }
 
 model OrderItem {
@@ -100,6 +113,8 @@ model OrderItem {
   price     Int
   order     Order   @relation(fields: [orderId], references: [id])
   variant   Variant @relation(fields: [variantId], references: [id])
+
+  @@schema("public")
 }
 
 model DeliverySlot {
@@ -109,6 +124,8 @@ model DeliverySlot {
   windowEnd   DateTime
   capacity    Int
   bookedCount Int      @default(0)
+
+  @@schema("public")
 }
 
 model TbybSession {
@@ -120,6 +137,8 @@ model TbybSession {
   result    String?
   notes     String?
   order     Order     @relation(fields: [orderId], references: [id])
+
+  @@schema("public")
 }
 
 model StockReservation {
@@ -134,12 +153,15 @@ model StockReservation {
 
   @@unique([orderId, variantId])
   @@index([expiresAt])
+  @@schema("public")
 }
 
 enum UserRole {
   CUSTOMER
   ADMIN
   COURIER
+
+  @@schema("public")
 }
 
 enum OrderStatus {
@@ -148,4 +170,6 @@ enum OrderStatus {
   CANCELLED
   EXPIRED
   DELIVERED
+
+  @@schema("public")
 }
