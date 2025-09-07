@@ -1,39 +1,33 @@
-import * as React from 'react';
-import { Pressable, Text, StyleSheet, Animated } from 'react-native';
-import { color, radius } from '../../theme/tokens';
+import React from 'react';
+import { Pressable, Text, StyleSheet, ViewStyle } from 'react-native';
+import { colors, radius } from './colors';
 
-export default function Chip({ label, selected, onPress }: { label: string; selected?: boolean; onPress?: () => void; }) {
-  const scale = React.useRef(new Animated.Value(1)).current;
-  const animate = (to:number) => Animated.spring(scale,{toValue:to,useNativeDriver:true,speed:20,bounciness:8}).start();
-
+export default function Chip({
+  label,
+  active,
+  onPress,
+  style,
+}: { label: string; active?: boolean; onPress?: () => void; style?: ViewStyle }) {
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => animate(0.98)}
-        onPressOut={() => animate(1)}
-        android_ripple={{ color: '#ffffff22' }}
-        style={[
-          styles.base,
-          selected ? styles.sel : styles.norm,
-        ]}
-      >
-        <Text style={[styles.txt, selected ? styles.txtSel : styles.txtNorm]}>{label}</Text>
-      </Pressable>
-    </Animated.View>
+    <Pressable onPress={onPress} style={[styles.chip, active && styles.active, style]}>
+      <Text style={[styles.text, active && styles.textActive]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  base: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
+  chip: {
+    backgroundColor: colors.chipBg,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radius.xl,
+    marginRight: 12,
     borderWidth: 1,
+    borderColor: colors.line,
   },
-  norm: { backgroundColor: '#141419', borderColor: '#2a2a31' },
-  sel:  { backgroundColor: '#ffffff', borderColor: '#ffffff' },
-  txt: { fontWeight: '800', letterSpacing: 0.2 },
-  txtNorm: { color: '#ffffff' },
-  txtSel:  { color: '#111111' },
+  active: { backgroundColor: colors.chipBgActive, borderColor: colors.chipBgActive },
+  text: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  textActive: { color: colors.text },
 });
