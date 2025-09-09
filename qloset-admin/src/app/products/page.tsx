@@ -16,7 +16,7 @@ export default async function ProductsPage() {
           <div key={p.id} className="p-3 flex items-center justify-between">
             <div>
               <div className="font-medium">{p.title}</div>
-              <div className="text-sm text-gray-500">{p.variants.length} variants • ₹{p.priceSale}</div>
+              <div className="text-sm text-gray-500">{(p.variants?.length ?? 0)} variants • ₹{p.priceSale}</div>
             </div>
             <div className="flex gap-2">
               <Link href={`/products/${p.id}`} className="px-3 py-1 rounded border">Edit</Link>
