@@ -146,8 +146,8 @@ export default function ProfileScreen() {
     { icon: "gift-outline", title: "Refer & Earn", subtitle: "Invite friends & get rewards" },
   ];
 
+  // ✅ Appearance removed
   const settingsMenuItems = [
-    { icon: "color-palette-outline", title: "Appearance", subtitle: "Dark mode, themes", screen: "Appearance" },
     { icon: "person-circle-outline", title: "Manage Account", subtitle: "Profile, preferences", screen: "ManageAccount" },
     { icon: "location-outline", title: "Addresses", subtitle: "Manage delivery addresses", screen: "Addresses" },
     { icon: "pricetag-outline", title: "My Offers", subtitle: "Coupons & discounts", screen: "Offers" },
@@ -503,6 +503,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: { color: "#fff", fontSize: 13, fontWeight: "500" },
   cardSubtitle: { color: "#aaa", fontSize: 11, marginTop: 2 },
+
+
 
   settingsRow: {
     backgroundColor: "#1E1E22",

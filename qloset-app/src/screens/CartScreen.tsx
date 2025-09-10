@@ -15,7 +15,7 @@ export default function CartScreen() {
       <FlatList
         data={items}
         keyExtractor={(i) => `${i.productId}:${i.variantId}`}
-        ListEmptyComponent={<Text style={{ color: '#666' }}>Your cart is empty.</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>Your cart is empty.</Text>}
         contentContainerStyle={{ gap: 8 }}
         renderItem={({ item }) => (
           <View style={styles.row}>
@@ -34,26 +34,34 @@ export default function CartScreen() {
       </View>
 
       <TouchableOpacity onPress={clear} style={{ marginTop: 12 }}>
-        <Text style={{ color: '#555' }}>Clear cart</Text>
+        <Text style={styles.clear}>Clear cart</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#fafafa' },
-  h1: { fontSize: 24, fontWeight: '800', marginBottom: 12 },
+  container: { flex: 1, padding: 16, backgroundColor: '#121216' }, // dark bg
+  h1: { fontSize: 24, fontWeight: '800', marginBottom: 12, color: '#fff' }, // white text
   row: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1E1E22', // dark card
     padding: 12,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  title: { fontWeight: '700' },
-  meta: { color: '#666', marginTop: 2 },
-  price: { fontWeight: '700' },
-  footer: { borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 12, marginTop: 12, gap: 12 },
-  total: { fontSize: 16, fontWeight: '800' },
+  title: { fontWeight: '700', color: '#fff' },
+  meta: { color: '#aaa', marginTop: 2 },
+  price: { fontWeight: '700', color: '#fff' },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: '#2A2A2F', // subtle dark border
+    paddingTop: 12,
+    marginTop: 12,
+    gap: 12,
+  },
+  total: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  empty: { color: '#aaa' },
+  clear: { color: '#aaa' },
 });

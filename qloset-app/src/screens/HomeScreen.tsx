@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../components/ui/colors';
@@ -61,6 +62,10 @@ export default function HomeScreen({ navigation }: any) {
   const [all, setAll] = React.useState<UiProduct[]>([]);
   const [loading, setLoading] = React.useState(true);
 
+  // 🔹 NEW: search state
+  const [searchVisible, setSearchVisible] = React.useState(false);
+  const [query, setQuery] = React.useState('');
+
   React.useEffect(() => {
     let mounted = true;
     (async () => {
@@ -79,10 +84,24 @@ export default function HomeScreen({ navigation }: any) {
     return () => { mounted = false; };
   }, []);
 
-  const data = React.useMemo(
+  // 🔹 filter by gender
+  const genderFiltered = React.useMemo(
     () => all.filter((p) => inferGender(p) === gender),
     [all, gender]
   );
+
+  // 🔹 filter by search query
+  const data = React.useMemo(() => {
+    if (!query.trim()) return genderFiltered;
+    const q = query.toLowerCase();
+    return genderFiltered.filter(
+      (p) =>
+        p.title.toLowerCase().includes(q) ||
+        (p.brand ?? '').toLowerCase().includes(q) ||
+        (p.color ?? '').toLowerCase().includes(q) ||
+        (p.description ?? '').toLowerCase().includes(q)
+    );
+  }, [genderFiltered, query]);
 
   const chips = ['Oversized T-shirt', 'Shirt', 'Jeans', 'Cargos & Parachutes', 'Hoodies'];
   const looks = [
@@ -97,10 +116,23 @@ export default function HomeScreen({ navigation }: any) {
       <TopHeader
         accentColor={accent}
         onCart={() => navigation.navigate('Cart')}
-        onSearch={() => navigation.navigate('Explore')}
+        onSearch={() => setSearchVisible((prev) => !prev)} // ✅ toggle search
         onWishlist={() => navigation.navigate('Profile')}
         onProfile={() => navigation.navigate('Profile')}
       />
+
+      {/* ✅ search bar */}
+      {searchVisible && (
+        <View style={styles.searchBox}>
+          <TextInput
+            placeholder="Search products..."
+            placeholderTextColor={colors.textDim}
+            style={styles.searchInput}
+            value={query}
+            onChangeText={setQuery}
+          />
+        </View>
+      )}
 
       <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
         <SegmentedToggle
@@ -128,8 +160,6 @@ export default function HomeScreen({ navigation }: any) {
           />
         )}
       />
-
-      {/* Accessories removed */}
 
       <View style={{ marginTop: 8 }}>
         <Text style={[styles.sectionTitle, { paddingHorizontal: 16 }]}>
@@ -190,4 +220,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   loader: { alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { color: colors.text, fontSize: 22, fontWeight: '900' },
+
+  // 🔹 search styles
+  searchBox: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  searchInput: {
+    color: colors.text,
+    fontSize: 16,
+  },
 });

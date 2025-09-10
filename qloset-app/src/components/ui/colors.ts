@@ -11,7 +11,7 @@ export const colors = {
   success: '#1FC77E',
   warning: '#F7B731',
   danger: '#FF4D4F',
-  electricPink: '#FF3B6B', 
+  electricPink: '#FF3B6B',
   electricBlue: '#00B2FF',
 
   // accents
@@ -23,6 +23,26 @@ export const colors = {
   // new for screenshot look
   redTile: '#E5252A',
 };
+
+// ✅ added: light theme palette
+export const lightColors = {
+  ...colors, // copy all keys so nothing breaks
+  bg: '#FFFFFF',
+  card: '#F5F5F5',
+  surface: '#FAFAFA',
+  line: '#E5E5E5',
+  text: '#000000',
+  textDim: '#4A4A4A',
+  primary: '#007AFF',
+  primaryText: '#FFFFFF',
+  chipBg: '#F0F0F0',
+  chipBgActive: '#DADADA',
+  redTile: '#FF5252',
+};
+
+// ✅ added: helper function
+export const getColors = (darkMode: boolean) =>
+  darkMode ? colors : lightColors;
 
 export const radius = { xs: 8, md: 14, lg: 18, xl: 24, pill: 999 };
 
