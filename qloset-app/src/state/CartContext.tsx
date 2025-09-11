@@ -13,6 +13,8 @@ export type CartItem = {
   variantId: string;
   size: string;
   qty: number;
+  /** 🔹 New: snapshot of available stock at the time of add (used to clamp setQty/increment) */
+  variantStock?: number;
 };
 
 type CartState = {
@@ -54,13 +56,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     (async () => {
-      // If signed in: fetch server cart
       if (user) {
         const serverItems = await fetchCart(user.id);
         const rawGuest = await AsyncStorage.getItem(GUEST_KEY);
         const guestItems: CartItem[] = rawGuest ? JSON.parse(rawGuest) : [];
 
-        // If there are guest items, ask to merge into signed-in cart
         if (guestItems.length > 0) {
           Alert.alert(
             "Keep items in your cart?",
@@ -102,67 +102,93 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user]);
 
-  // Persist whenever items change
-React.useEffect(() => {
-  // ✅ RN-safe typing (instead of NodeJS.Timeout)
-  let t: ReturnType<typeof setTimeout> | null = null;
+  // Persist whenever items change (debounced)
+  React.useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
 
-  const persist = async () => {
-    if (user) {
-      await saveCart(user.id, items);
-    } else {
-      await AsyncStorage.setItem(GUEST_KEY, JSON.stringify(items));
-    }
-  };
+    const persist = async () => {
+      if (user) {
+        await saveCart(user.id, items);
+      } else {
+        await AsyncStorage.setItem(GUEST_KEY, JSON.stringify(items));
+      }
+    };
 
-  t = setTimeout(persist, 250);
-  return () => {
-    if (t) clearTimeout(t);
-  };
-}, [items, user]);
+    t = setTimeout(persist, 250);
+    return () => {
+      if (t) clearTimeout(t);
+    };
+  }, [items, user]);
 
   // If user signs out, empty the in-memory cart and guest storage
   React.useEffect(() => {
-    // when user becomes null after being logged in:
     if (!user) {
       (async () => {
         await AsyncStorage.removeItem(GUEST_KEY);
-        setItems([]); // cart should be empty for signed-out state
+        setItems([]);
       })();
     }
   }, [user]);
 
-  // Mutators
+  // --- Mutators with stock clamps (no numbers shown to the user) ---
+
   const add = (p: Product, v: Variant, qty = 1) => {
     setItems((prev) => {
+      // determine available stock for this variant (if provided)
+      const available = Number.isFinite((v as any)?.stockQty)
+        ? Math.max(0, Number((v as any).stockQty))
+        : Number.POSITIVE_INFINITY;
+
       const key = `${p.id}:${v.id}`;
       const i = prev.findIndex((x) => `${x.productId}:${x.variantId}` === key);
+
       if (i >= 0) {
+        const nextQty = Math.min(prev[i].qty + qty, available);
+        if (nextQty === prev[i].qty) return prev; // already at cap
         const copy = [...prev];
-        copy[i] = { ...copy[i], qty: copy[i].qty + qty };
+        copy[i] = { ...copy[i], qty: nextQty, variantStock: available };
         return copy;
       }
+
+      const startQty = Math.min(qty, available);
+      if (startQty <= 0) return prev; // OOS guard: don't add an empty line
+
       return [
         ...prev,
         {
           productId: p.id,
           title: p.title,
-          price: p.priceSale,
+          price: (p as any).priceSale ?? (p as any).priceMrp ?? (p as any).price ?? 0,
           variantId: v.id,
-          size: v.size,
-          qty,
+          size: (v as any).size ?? "",
+          qty: startQty,
+          variantStock: available,
         },
       ];
     });
   };
 
   const remove = (productId: string, variantId: string) =>
-    setItems((prev) => prev.filter((x) => !(x.productId === productId && x.variantId === variantId)));
+    setItems((prev) =>
+      prev.filter((x) => !(x.productId === productId && x.variantId === variantId))
+    );
 
   const setQty = (productId: string, variantId: string, qty: number) =>
-    setItems((prev) =>
-      prev.map((x) => (x.productId === productId && x.variantId === variantId ? { ...x, qty } : x))
-    );
+    setItems((prev) => {
+      const copy = [...prev];
+      const i = copy.findIndex((x) => x.productId === productId && x.variantId === variantId);
+      if (i < 0) return prev;
+
+      const available = Number.isFinite(copy[i].variantStock)
+        ? Math.max(0, Number(copy[i].variantStock))
+        : Number.POSITIVE_INFINITY;
+
+      const clamped = Math.max(1, Math.min(Number(qty) || 1, available));
+      if (clamped === copy[i].qty) return prev;
+
+      copy[i] = { ...copy[i], qty: clamped };
+      return copy;
+    });
 
   const clear = () => setItems([]);
 

@@ -1,5 +1,5 @@
 // src/screens/ProductScreen.tsx
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  RefreshControl,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { RouteProp, useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
+import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import { API_BASE } from "../lib/api";
 import Button from "../components/ui/Button";
 import { useCart } from "../state/CartContext";
@@ -33,52 +32,33 @@ type Product = {
 export default function ProductScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "Product">>();
   const nav = useNavigation();
-  const { add } = useCart() as any;
+  const { items: cartItems, add } = useCart() as any; // 👈 we read cart to enforce per-variant caps
 
   const [p, setP] = useState<Product | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Wishlist context
   const { wishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
-  const loadProduct = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/products/${route.params.id}`);
-      const data = (await res.json()) as Product;
-      setP(data);
-      if (data?.variants?.[0]?.id) setSelected((prev) => prev ?? data.variants[0].id);
-    } catch (e) {
-      console.warn("Failed to load product", e);
-    } finally {
-      setRefreshing(false);
-    }
+  // Load product
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/products/${route.params.id}`);
+        const data = (await res.json()) as Product;
+        setP(data);
+        if (data?.variants?.[0]?.id) setSelected(data.variants[0].id);
+      } catch (e) {
+        console.warn("Failed to load product", e);
+      }
+    })();
   }, [route.params.id]);
 
-  // initial load
-  useEffect(() => {
-    loadProduct();
-  }, [loadProduct]);
-
-  // refetch on focus
-  useFocusEffect(
-    useCallback(() => {
-      loadProduct();
-    }, [loadProduct])
-  );
-
-  // total stock across variants
+  // total stock across variants -> used only to disable Add to cart if the whole product is OOS
   const totalStock = useMemo(
     () => (p?.variants ?? []).reduce((s, v) => s + (v?.stockQty ?? 0), 0),
     [p?.variants]
   );
-
-  // stock for currently selected variant
-  const selectedStock = useMemo(() => {
-    if (!p || !selected) return 0;
-    const v = p.variants.find((x) => x.id === selected);
-    return v?.stockQty ?? 0;
-  }, [p, selected]);
 
   // is this product in wishlist?
   const isWishlisted = useMemo(
@@ -100,24 +80,9 @@ export default function ProductScreen() {
     }
   };
 
-  if (!p) {
-    return (
-      <ScrollView
-        contentContainerStyle={{ flex: 1 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              loadProduct();
-            }}
-          />
-        }
-      />
-    );
-  }
+  if (!p) return <View style={{ flex: 1 }} />;
 
-  // Add to cart with stock guards
+  // Add to cart with stock guards (NO stock count shown to user)
   const addToCart = () => {
     if (totalStock <= 0) {
       Alert.alert("Out of stock", "This product is currently unavailable.");
@@ -129,27 +94,28 @@ export default function ProductScreen() {
     }
     const v = p.variants.find((x) => x.id === selected);
     if (!v) return;
+
+    // Block adding if that size has zero
     if ((v.stockQty ?? 0) <= 0) {
       Alert.alert("Out of stock", "Selected size is unavailable.");
       return;
     }
+
+    // Enforce per-variant cap by comparing with what's already in the cart
+    const inCartQty =
+      (cartItems?.find((ci: any) => ci.variantId === v.id)?.qty as number) || 0;
+
+    if (inCartQty + 1 > (v.stockQty ?? 0)) {
+      Alert.alert("Only a few left", "You’ve reached the available quantity for this size.");
+      return;
+    }
+
     add(p, v, 1);
     Alert.alert("Added to cart", `${p.title} (${v.size})`);
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.wrap}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            loadProduct();
-          }}
-        />
-      }
-    >
+    <ScrollView contentContainerStyle={styles.wrap}>
       {/* Images */}
       <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
         {(p.images?.length ? p.images : [null]).map((src, idx) => (
@@ -176,10 +142,8 @@ export default function ProductScreen() {
 
         <Text style={styles.price}>₹{p.priceSale}</Text>
 
-        {/* Out-of-stock badge for whole product */}
-        {totalStock <= 0 ? (
-          <Text style={styles.oosProduct}>Out of stock</Text>
-        ) : null}
+        {/* If the entire product is OOS, show a simple badge (no numbers) */}
+        {totalStock <= 0 ? <Text style={styles.oosProduct}>Out of stock</Text> : null}
 
         <Text style={styles.section}>Select size</Text>
         <View style={styles.sizesRow}>
@@ -212,12 +176,7 @@ export default function ProductScreen() {
           })}
         </View>
 
-        {/* Selected variant stock hint */}
-        {selected ? (
-          <Text style={styles.variantStock}>
-            {selectedStock > 0 ? `${selectedStock} left` : "Selected size out of stock"}
-          </Text>
-        ) : null}
+        {/* 🔕 Removed the “6 left / X left” line on purpose */}
 
         <Button title="Add to cart" onPress={addToCart} disabled={totalStock <= 0} />
         <View style={{ height: 12 }} />
@@ -287,8 +246,6 @@ const styles = StyleSheet.create({
   sizeTxt: { color: "#111", fontWeight: "700" },
   sizeTxtActive: { color: "#fff" },
   sizeTxtDisabled: { color: "#666" },
-
-  variantStock: { marginTop: 6, color: "#666" },
 
   desc: { color: "#333", lineHeight: 20 },
 });

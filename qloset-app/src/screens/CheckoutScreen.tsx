@@ -1,3 +1,4 @@
+// src/screens/CheckoutScreen.tsx
 import * as React from 'react';
 import {
   View,
@@ -13,7 +14,7 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useCart } from '../state/CartContext';
-import { API_BASE } from '../lib/api';
+import { checkoutOrder, type CheckoutItem } from '../lib/api'; // ✅ safe helper
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -33,7 +34,6 @@ export default function CheckoutScreen() {
   const [loading, setLoading] = React.useState(false);
   const [locLoading, setLocLoading] = React.useState(false);
 
-  // Saved addresses from Profile
   type SavedAddress = {
     id: string;
     label?: string | null;
@@ -62,12 +62,14 @@ export default function CheckoutScreen() {
       if (!error && data) {
         const list = data as SavedAddress[];
         setAddresses(list);
-        const def = list.find(a => a.is_default);
+        const def = list.find((a) => a.is_default);
         setSelectedAddressId(def?.id ?? list[0]?.id ?? null);
       }
     }
     load();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   const useMyLocation = async () => {
@@ -100,7 +102,7 @@ export default function CheckoutScreen() {
           if (addr) setLine1(addr);
         }
       } catch {
-        /* best effort reverse geocode */
+        /* ignore reverse geocode errors */
       }
 
       Alert.alert(
@@ -115,45 +117,64 @@ export default function CheckoutScreen() {
   };
 
   const placeOrder = async () => {
+    // basic client validation (kept as you had)
     if (!name.trim()) return Alert.alert('Please enter your name');
     if (!/^\d{10}$/.test(phone)) return Alert.alert('Enter a valid 10-digit phone');
     if (!line1.trim()) return Alert.alert('Please enter address line');
     if (!/^\d{6}$/.test(pincode)) return Alert.alert('Enter a valid 6-digit pincode');
     if (!items.length) return Alert.alert('Your cart is empty');
 
+    if (!selectedAddressId) {
+      return Alert.alert('Please select or enter an address');
+    }
+
     try {
       setLoading(true);
-      const payload = {
-        userPhone: phone,
-        tbyb,
-        addressId: selectedAddressId,
-        address: { name, phone, line1, landmark, pincode, lat, lng },
-        items: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
-      };
-      const res = await fetch(`${API_BASE}/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+
+      // 🔹 Build items for API
+      const checkoutItems: CheckoutItem[] = items.map((i: any) => {
+        const price =
+          typeof i.price === 'number'
+            ? i.price
+            : typeof i.priceSale === 'number'
+            ? i.priceSale
+            : typeof i.priceMrp === 'number'
+            ? i.priceMrp
+            : 0; // server recomputes anyway
+        return {
+          variantId: i.variantId,
+          qty: i.qty,
+          price,
+        };
       });
 
-      const data = await res.json().catch(() => ({} as any));
-      if (!res.ok || !data.ok) {
-        const msg =
-          (typeof data?.message === 'string'
-            ? data.message
-            : Array.isArray(data?.message)
-            ? data.message.join(', ')
-            : data?.error) || `HTTP ${res.status}`;
-        throw new Error(msg);
-      }
+      // 🔹 Call race-safe checkout
+      const orderRes = await checkoutOrder({
+        addressId: selectedAddressId,
+        items: checkoutItems,
+        tbyb,
+        // token: authToken, // add if your API requires auth header
+      });
+
+      // normalize shape and show success
+      const ord: any = orderRes;
+      const orderId = ord?.id ?? ord?.orderId ?? '—';
+      const subtotal = ord?.subtotal ?? total ?? 0;
 
       clear();
       Alert.alert(
         'Order placed',
-        `Order ID: ${data.orderId}\nTotal: ₹${data.subtotal}\nTBYB: ${tbyb ? 'Yes' : 'No'}`
+        `Order ID: ${orderId}\nTotal: ₹${subtotal}\nTBYB: ${tbyb ? 'Yes' : 'No'}`
       );
     } catch (e: any) {
-      Alert.alert('Checkout failed', String(e?.message || e));
+      if (e?.status === 409) {
+        Alert.alert(
+          'Out of stock',
+          'One or more items just went out of stock. Please review your cart.'
+        );
+      } else {
+        Alert.alert('Checkout failed', String(e?.message || e));
+      }
     } finally {
       setLoading(false);
     }
@@ -166,10 +187,7 @@ export default function CheckoutScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.h1}>Checkout</Text>
 
           {/* Contact */}
@@ -198,7 +216,6 @@ export default function CheckoutScreen() {
             {user && addresses.length > 0 ? (
               <View style={{ marginBottom: 8 }}>
                 <Text style={[styles.subheading]}>Use this address</Text>
-
                 {addresses.map((a) => {
                   const selected = selectedAddressId === a.id;
                   return (
@@ -214,11 +231,10 @@ export default function CheckoutScreen() {
                       ]}
                     >
                       <Text style={{ fontWeight: '700', color: '#fff' }}>
-                        {a.label ? `${a.label} — ` : ''}{a.line1}
+                        {a.label ? `${a.label} — ` : ''}
+                        {a.line1}
                       </Text>
-                      {a.line2 ? (
-                        <Text style={{ color: '#aaa' }}>{a.line2}</Text>
-                      ) : null}
+                      {a.line2 ? <Text style={{ color: '#aaa' }}>{a.line2}</Text> : null}
                       <Text style={{ color: '#aaa' }}>{a.pincode}</Text>
                       {a.is_default ? (
                         <Text style={{ color: '#10B981', marginTop: 4 }}>Default</Text>
@@ -226,10 +242,9 @@ export default function CheckoutScreen() {
                     </TouchableOpacity>
                   );
                 })}
-
                 <TouchableOpacity
                   onPress={() => {
-                    const chosen = addresses.find(x => x.id === selectedAddressId);
+                    const chosen = addresses.find((x) => x.id === selectedAddressId);
                     if (!chosen) return;
                     setLine1(chosen.line1 || '');
                     setPincode(chosen.pincode || '');
@@ -302,7 +317,9 @@ export default function CheckoutScreen() {
           {/* Summary */}
           <View style={styles.card}>
             <Text style={styles.section}>Summary</Text>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>Total: ₹{total}</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>
+              Total: ₹{total}
+            </Text>
           </View>
 
           {/* CTA */}
