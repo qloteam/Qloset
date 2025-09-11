@@ -1,9 +1,9 @@
 // src/state/CartContext.tsx
 import * as React from "react";
-import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../contexts/AuthContext";
 import { fetchCart, saveCart } from "../db/cart";
+import { confirmSequential } from "@/utils/promptQueue"; // ⬅️ queued confirmation
 import type { Product, Variant } from "../types";
 
 export type CartItem = {
@@ -13,7 +13,7 @@ export type CartItem = {
   variantId: string;
   size: string;
   qty: number;
-  /** 🔹 New: snapshot of available stock at the time of add (used to clamp setQty/increment) */
+  /** snapshot of available stock at the time of add (used to clamp setQty/increment) */
   variantStock?: number;
 };
 
@@ -61,30 +61,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const rawGuest = await AsyncStorage.getItem(GUEST_KEY);
         const guestItems: CartItem[] = rawGuest ? JSON.parse(rawGuest) : [];
 
-        if (guestItems.length > 0) {
-          Alert.alert(
-            "Keep items in your cart?",
-            `You added ${guestItems.length} ${guestItems.length === 1 ? "item" : "items"} before signing in. Do you want to add ${guestItems.length === 1 ? "it" : "them"} to your account cart?`,
-            [
-              {
-                text: "No",
-                style: "cancel",
-                onPress: async () => {
-                  await AsyncStorage.removeItem(GUEST_KEY);
-                  if (!cancelled) setItems(serverItems ?? []);
-                },
-              },
-              {
-                text: "Yes",
-                onPress: async () => {
-                  const merged = mergeDedup(serverItems ?? [], guestItems);
-                  await saveCart(user.id, merged);
-                  await AsyncStorage.removeItem(GUEST_KEY);
-                  if (!cancelled) setItems(merged);
-                },
-              },
-            ]
-          );
+        if (!cancelled && guestItems.length > 0) {
+          // ⬇️ queued dialog so it runs after the wishlist prompt, not on top of it
+          const accepted = await confirmSequential({
+            title: "Keep items in your cart?",
+            message: `You added ${guestItems.length} ${
+              guestItems.length === 1 ? "item" : "items"
+            } before signing in. Add ${
+              guestItems.length === 1 ? "it" : "them"
+            } to your account cart?`,
+            confirmText: "Add",
+            cancelText: "Not now",
+          });
+
+          if (cancelled) return;
+
+          if (accepted) {
+            const merged = mergeDedup(serverItems ?? [], guestItems);
+            await saveCart(user.id, merged);
+            await AsyncStorage.removeItem(GUEST_KEY);
+            if (!cancelled) setItems(merged);
+          } else {
+            await AsyncStorage.removeItem(GUEST_KEY);
+            if (!cancelled) setItems(serverItems ?? []);
+          }
         } else {
           if (!cancelled) setItems(serverItems ?? []);
         }
@@ -158,7 +158,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         {
           productId: p.id,
           title: p.title,
-          price: (p as any).priceSale ?? (p as any).priceMrp ?? (p as any).price ?? 0,
+          price:
+            (p as any).priceSale ??
+            (p as any).priceMrp ??
+            (p as any).price ??
+            0,
           variantId: v.id,
           size: (v as any).size ?? "",
           qty: startQty,

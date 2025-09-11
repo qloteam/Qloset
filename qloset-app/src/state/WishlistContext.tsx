@@ -1,8 +1,8 @@
 // src/state/WishlistContext.tsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../contexts/AuthContext";
+import { confirmSequential } from "@/utils/promptQueue";
 
 export type WLItem = {
   id: string;
@@ -71,45 +71,46 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
         const rawUser = await AsyncStorage.getItem(userKey);
         const userList: WLItem[] = rawUser ? JSON.parse(rawUser) : [];
 
-        // If guest has items, offer merge
+        // If guest has items, offer merge — queued so it won't clash with the cart prompt
         const rawGuest = await AsyncStorage.getItem(GUEST_KEY);
         const guestList: WLItem[] = rawGuest ? JSON.parse(rawGuest) : [];
 
         if (!cancelled && guestList.length > 0) {
-          Alert.alert(
-            "Keep your likes?",
-            `You liked ${guestList.length} ${guestList.length === 1 ? "item" : "items"} before signing in. Add ${guestList.length === 1 ? "it" : "them"} to your account wishlist?`,
-            [
-              {
-                text: "No",
-                style: "cancel",
-                onPress: async () => {
-                  await AsyncStorage.removeItem(GUEST_KEY);
-                  if (!cancelled) {
-                    setWishlist(userList);
-                    setHydrated(true);
-                  }
-                },
-              },
-              {
-                text: "Yes",
-                onPress: async () => {
-                  const merged = mergeUnique(userList, guestList);
-                  await AsyncStorage.setItem(userKey, JSON.stringify(merged));
-                  await AsyncStorage.removeItem(GUEST_KEY);
-                  if (!cancelled) {
-                    setWishlist(merged);
-                    setHydrated(true);
-                  }
-                },
-              },
-            ]
-          );
-        } else {
-          if (!cancelled) {
-            setWishlist(userList);
-            setHydrated(true);
+          const accepted = await confirmSequential({
+            title: "Keep your likes?",
+            message: `You liked ${guestList.length} ${
+              guestList.length === 1 ? "item" : "items"
+            } before signing in. Add ${
+              guestList.length === 1 ? "it" : "them"
+            } to your account wishlist?`,
+            confirmText: "Add",
+            cancelText: "Not now",
+          });
+
+          if (cancelled) return;
+
+          if (accepted) {
+            const merged = mergeUnique(userList, guestList);
+            await AsyncStorage.setItem(userKey, JSON.stringify(merged));
+            await AsyncStorage.removeItem(GUEST_KEY);
+            if (!cancelled) {
+              setWishlist(merged);
+              setHydrated(true);
+            }
+          } else {
+            await AsyncStorage.removeItem(GUEST_KEY);
+            if (!cancelled) {
+              setWishlist(userList);
+              setHydrated(true);
+            }
           }
+          return; // ✅ handled the prompt path
+        }
+
+        // No guest items to merge
+        if (!cancelled) {
+          setWishlist(userList);
+          setHydrated(true);
         }
         return;
       }
