@@ -13,12 +13,14 @@ import {
   ScrollView,
 } from 'react-native';
 import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
 import { useCart } from '../state/CartContext';
 import { checkoutOrder, type CheckoutItem } from '../lib/api'; // ✅ safe helper
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function CheckoutScreen() {
+  const nav = useNavigation<any>();
   const { items, total, clear } = useCart();
 
   const [name, setName] = React.useState('');
@@ -46,6 +48,14 @@ export default function CheckoutScreen() {
   const { user } = useAuth();
   const [addresses, setAddresses] = React.useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = React.useState<string | null>(null);
+
+  // 🔒 Extra guard: if someone reaches here unsigned (deep link/back nav), bounce with a prompt
+  React.useEffect(() => {
+    if (!user) {
+      Alert.alert('Please sign-in to checkout');
+      nav.goBack();
+    }
+  }, [user, nav]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -231,8 +241,7 @@ export default function CheckoutScreen() {
                       ]}
                     >
                       <Text style={{ fontWeight: '700', color: '#fff' }}>
-                        {a.label ? `${a.label} — ` : ''}
-                        {a.line1}
+                        {a.label ? `${a.label} — ` : ''}{a.line1}
                       </Text>
                       {a.line2 ? <Text style={{ color: '#aaa' }}>{a.line2}</Text> : null}
                       <Text style={{ color: '#aaa' }}>{a.pincode}</Text>
