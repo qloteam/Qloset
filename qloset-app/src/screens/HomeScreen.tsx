@@ -1,3 +1,4 @@
+// src/screens/HomeScreen.tsx
 import * as React from 'react';
 import {
   View,
@@ -14,7 +15,15 @@ import SegmentedToggle from '../components/ui/SegmentedToggle';
 import Chip from '../components/ui/Chip';
 import ImageCapsule from '../components/ui/ImageCapsule';
 import TopHeader from '../components/TopHeader';
+import { useFocusEffect } from '@react-navigation/native';
 import GridProductCard from '../components/ui/GridProductCard';
+
+// Sum variant stock if present on the product payload
+const sumVariantStock = (anyP: any) =>
+  Array.isArray(anyP?.variants)
+    ? anyP.variants.reduce((s: number, v: any) => s + (v?.stockQty ?? 0), 0)
+    : 0;
+
 
 type UiProduct = {
   id: string;
@@ -26,10 +35,12 @@ type UiProduct = {
   brand?: string | null;
   color?: string | null;
   gender?: string | null;
+  stock?: number; // ✅ added
 };
 
 const toUiProduct = (p: ApiProduct): UiProduct => {
   const anyP = p as any;
+  const computed = sumVariantStock(anyP);
   return {
     id: anyP.id ?? anyP._id ?? String(anyP.sku ?? anyP.slug ?? Math.random()),
     title: anyP.title ?? anyP.name ?? 'Untitled',
@@ -41,8 +52,11 @@ const toUiProduct = (p: ApiProduct): UiProduct => {
     brand: anyP.brand ?? null,
     color: anyP.color ?? null,
     gender: anyP.gender ?? anyP.category?.gender ?? null,
+    // ✅ prefer API stock if present; otherwise sum variants
+    stock: typeof anyP.stock === 'number' ? anyP.stock : computed,
   };
 };
+
 
 const GENDERS = ['Women', 'Men'] as const;
 type Gender = (typeof GENDERS)[number];
@@ -61,28 +75,39 @@ export default function HomeScreen({ navigation }: any) {
   const [gender, setGender] = React.useState<Gender>('Women');
   const [all, setAll] = React.useState<UiProduct[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false); // ✅ pull-to-refresh
 
-  // 🔹 NEW: search state
+  // 🔹 search state
   const [searchVisible, setSearchVisible] = React.useState(false);
   const [query, setQuery] = React.useState('');
 
+  // ✅ single loader used by effect, focus & refresh
+  const loadProducts = React.useCallback(async () => {
+    try {
+      if (!refreshing) setLoading(true);
+      const apiItems: ApiProduct[] = await listProducts();
+      const uiItems = (apiItems ?? []).map(toUiProduct);
+      setAll(uiItems);
+    } catch (e) {
+      console.log('[Home] products load error:', e);
+      setAll([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [refreshing]);
+
+  // initial load
   React.useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const apiItems: ApiProduct[] = await listProducts();
-        const uiItems = (apiItems ?? []).map(toUiProduct);
-        if (mounted) setAll(uiItems);
-      } catch (e) {
-        console.log('[Home] products load error:', e);
-        if (mounted) setAll([]);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
+    loadProducts();
+  }, [loadProducts]);
+
+  // ✅ refetch when screen gains focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadProducts();
+    }, [loadProducts])
+  );
 
   // 🔹 filter by gender
   const genderFiltered = React.useMemo(
@@ -116,12 +141,12 @@ export default function HomeScreen({ navigation }: any) {
       <TopHeader
         accentColor={accent}
         onCart={() => navigation.navigate('Cart')}
-        onSearch={() => setSearchVisible((prev) => !prev)} // ✅ toggle search
+        onSearch={() => setSearchVisible((prev) => !prev)}
         onWishlist={() => navigation.navigate('Profile')}
         onProfile={() => navigation.navigate('Profile')}
       />
 
-      {/* ✅ search bar */}
+      {/* 🔎 search bar */}
       {searchVisible && (
         <View style={styles.searchBox}>
           <TextInput
@@ -198,6 +223,11 @@ export default function HomeScreen({ navigation }: any) {
         numColumns={2}
         columnWrapperStyle={{ paddingHorizontal: 16, justifyContent: 'space-between' }}
         contentContainerStyle={{ paddingBottom: 16 }}
+        refreshing={refreshing} // ✅ pull-to-refresh
+        onRefresh={() => {
+          setRefreshing(true);
+          loadProducts();
+        }}
         renderItem={({ item }) => (
           <GridProductCard
             item={{
@@ -206,6 +236,7 @@ export default function HomeScreen({ navigation }: any) {
               priceMrp: item.priceMrp,
               priceSale: item.priceSale,
               images: item.images,
+              stock: item.stock, // ✅ pass stock to card
             }}
             accentColor={accent}
             onPress={() => navigation.navigate('Product', { id: item.id })}
@@ -221,7 +252,7 @@ const styles = StyleSheet.create({
   loader: { alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { color: colors.text, fontSize: 22, fontWeight: '900' },
 
-  // 🔹 search styles
+  // search styles
   searchBox: {
     marginHorizontal: 16,
     marginTop: 8,

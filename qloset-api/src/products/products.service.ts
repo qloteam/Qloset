@@ -9,6 +9,8 @@ import { UpdateProductDto } from './dto/update-product.dto';
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
+  
+  
   // ---------- Public ----------
   async findAll(search?: string) {
     return this.prisma.product.findMany({
@@ -137,4 +139,65 @@ export class ProductsService {
     // HARD DELETE (optional)
     // return this.prisma.product.delete({ where: { id } });
   }
+
+/** Set total product stock by adjusting variant stockQtys. Never goes below 0. */
+async adminSetTotalStock(productId: string, target: number) {
+  if (!Number.isInteger(target) || target < 0) {
+    throw new Error('stock must be a non-negative integer');
+  }
+
+  // Load current variants
+  const variants = await this.prisma.variant.findMany({
+    where: { productId },
+    orderBy: { id: 'asc' }, // stable order
+    select: { id: true, stockQty: true },
+  });
+
+  // If no variants exist, create a default one
+  if (variants.length === 0) {
+    await this.prisma.variant.create({
+      data: {
+        productId,
+        size: 'Default',
+        sku: `${productId}-default`,
+        stockQty: target,
+      },
+    });
+    return { stock: target };
+  }
+
+  const current = variants.reduce((s, v) => s + (v.stockQty ?? 0), 0);
+  const delta = target - current;
+  if (delta === 0) return { stock: target };
+
+  // Transaction to apply changes
+  await this.prisma.$transaction(async (tx) => {
+    if (delta > 0) {
+      // Add all extra units to the first variant (simple, predictable)
+      const v0 = variants[0];
+      await tx.variant.update({
+        where: { id: v0.id },
+        data: { stockQty: v0.stockQty + delta },
+      });
+    } else {
+      // Remove units across variants left-to-right without going below 0
+      let remaining = -delta;
+      for (const v of variants) {
+        if (remaining <= 0) break;
+        const take = Math.min(v.stockQty, remaining);
+        if (take > 0) {
+          await tx.variant.update({
+            where: { id: v.id },
+            data: { stockQty: v.stockQty - take },
+          });
+          remaining -= take;
+        }
+      }
+      // If remaining > 0 here, all variants hit 0 — target is smaller than possible; we already clamped to >=0 so it's fine.
+    }
+  });
+
+  return { stock: target };
+}
+
 }
