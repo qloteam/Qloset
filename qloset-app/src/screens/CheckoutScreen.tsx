@@ -1,4 +1,5 @@
 // src/screens/CheckoutScreen.tsx
+import { fetchProfile } from '@/db/profile';
 import * as React from 'react';
 import {
   View,
@@ -49,14 +50,66 @@ export default function CheckoutScreen() {
   const [addresses, setAddresses] = React.useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = React.useState<string | null>(null);
 
-  // 🔒 Extra guard: if someone reaches here unsigned (deep link/back nav), bounce with a prompt
+  // 🔒 Stronger guard: if unsigned, push to Auth instead of just alerting.
   React.useEffect(() => {
-    if (!user) {
-      Alert.alert('Please sign-in to checkout');
-      nav.goBack();
-    }
+    if (user) return;
+
+    const tryNavigate = (name: string, params?: any) => {
+      try {
+        // @ts-ignore
+        nav.navigate(name, params);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (tryNavigate('EmailAuthScreen', { redirect: 'Checkout' })) return;
+    if (tryNavigate('Login', { redirect: 'Checkout' })) return;
+    if (tryNavigate('LoginScreen', { redirect: 'Checkout' })) return;
+    if (tryNavigate('Auth')) return;
+
+    Alert.alert('Please sign-in to checkout');
+    // @ts-ignore
+    nav.goBack?.();
   }, [user, nav]);
 
+  // 👤 Auto-fill name & phone for signed-in users
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!user) return;
+      try {
+        const prof = await fetchProfile(user.id);
+
+        if (!alive) return;
+
+        const pickedName =
+          prof?.name ??
+          // @ts-ignore
+          user.user_metadata?.full_name ??
+          // @ts-ignore
+          user.user_metadata?.name ??
+          '';
+
+        const pickedPhone =
+          prof?.phone ??
+          // @ts-ignore
+          user.user_metadata?.phone ??
+          '';
+
+        if (pickedName) setName((n) => (n ? n : pickedName));
+        if (pickedPhone) setPhone((p) => (p ? p : String(pickedPhone)));
+      } catch {
+        // ignore – user can still proceed
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
+  // 📦 Load saved addresses for user
   React.useEffect(() => {
     let mounted = true;
     async function load() {
@@ -202,22 +255,53 @@ export default function CheckoutScreen() {
 
           {/* Contact */}
           <View style={styles.card}>
-            <TextInput
-              placeholder="Full name"
-              placeholderTextColor="#888"
-              value={name}
-              onChangeText={setName}
-              style={styles.input}
-            />
-            <TextInput
-              placeholder="Phone (10 digits)"
-              placeholderTextColor="#888"
-              keyboardType="number-pad"
-              value={phone}
-              onChangeText={setPhone}
-              style={styles.input}
-              maxLength={10}
-            />
+            <Text style={styles.section}>Contact</Text>
+
+            {user ? (
+              <>
+                <View style={styles.readonlyRow}>
+                  <Text style={styles.readonlyLabel}>Name</Text>
+                  <Text style={styles.readonlyValue}>{name || '—'}</Text>
+                </View>
+                <View style={styles.readonlyRow}>
+                  <Text style={styles.readonlyLabel}>Phone</Text>
+                  <Text style={styles.readonlyValue}>{phone || '—'}</Text>
+                </View>
+                {/* If you want to allow editing here, switch to inputs with editable={false} */}
+              </>
+            ) : (
+              <>
+                <TextInput
+                  placeholder="Full name"
+                  placeholderTextColor="#888"
+                  value={name}
+                  onChangeText={setName}
+                  style={styles.input}
+                />
+                <TextInput
+                  placeholder="Phone (10 digits)"
+                  placeholderTextColor="#888"
+                  keyboardType="number-pad"
+                  value={phone}
+                  onChangeText={setPhone}
+                  style={styles.input}
+                  maxLength={10}
+                />
+                <TouchableOpacity
+                  onPress={() => {
+                    try {
+                      // @ts-ignore
+                      nav.navigate('EmailAuthScreen', { redirect: 'Checkout' });
+                    } catch {
+                      Alert.alert('Please sign-in to continue');
+                    }
+                  }}
+                  style={[styles.cta, { marginTop: 4 }]}
+                >
+                  <Text style={styles.ctaText}>Sign in / Sign up</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
           {/* Address */}
@@ -241,7 +325,8 @@ export default function CheckoutScreen() {
                       ]}
                     >
                       <Text style={{ fontWeight: '700', color: '#fff' }}>
-                        {a.label ? `${a.label} — ` : ''}{a.line1}
+                        {a.label ? `${a.label} — ` : ''}
+                        {a.line1}
                       </Text>
                       {a.line2 ? <Text style={{ color: '#aaa' }}>{a.line2}</Text> : null}
                       <Text style={{ color: '#aaa' }}>{a.pincode}</Text>
@@ -409,4 +494,16 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   ctaText: { color: '#fff', fontWeight: '900', fontSize: 18 },
+
+  // New read-only styles
+  readonlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#333',
+  },
+  readonlyLabel: { color: '#bbb' },
+  readonlyValue: { color: '#fff', fontWeight: '600' },
 });
