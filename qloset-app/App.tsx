@@ -21,6 +21,8 @@ import CartScreen from "./src/screens/CartScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import ProductScreen from "./src/screens/ProductScreen";
 import CheckoutScreen from "./src/screens/CheckoutScreen";
+import SplashScreen from "./src/screens/SplashScreen";
+
 
 // Profile sub-pages
 import AppearanceScreen from "./src/screens/AppearanceScreen";
@@ -169,11 +171,13 @@ export default function App() {
         <ThemeProvider>
           <WishlistProvider>
             <NavigationContainer>
-              <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
+                <Stack.Screen name="Splash" component={SplashScreen} />
                 <Stack.Screen name="MainTabs" component={Tabs} />
                 <Stack.Screen name="Product" component={ProductScreen} />
                 <Stack.Screen name="Wishlist" component={WishlistScreen} />
                 <Stack.Screen name="Checkout" component={CheckoutScreen} />
+                
               </Stack.Navigator>
             </NavigationContainer>
           </WishlistProvider>

@@ -152,7 +152,7 @@ export default function ExploreScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg, padding: 16 },
+  wrap: { flex: 1, backgroundColor: colors.bg, padding: 16, paddingTop: 70 },
   center: { alignItems: 'center', justifyContent: 'center' },
   h1: { color: colors.text, fontSize: 22, fontWeight: '900', marginBottom: 8 },
   searchBox: {

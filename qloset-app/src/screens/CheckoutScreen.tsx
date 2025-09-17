@@ -244,7 +244,7 @@ export default function CheckoutScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#121216' }}>
+    <View style={{ flex: 1, backgroundColor: '#121216', paddingTop: 70 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
