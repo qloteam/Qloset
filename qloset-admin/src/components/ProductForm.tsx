@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { Variant, Product } from '@/lib/api';
+import { supabase, getPublicUrl } from '@/lib/supabase';
 
 type Props = {
   initial?: Partial<Product>;
@@ -8,7 +9,8 @@ type Props = {
 };
 
 // temp ids for newly added (unsaved) variants
-const genTmpId = () => `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const genTmpId = () =>
+  `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 export default function ProductForm({ initial, onSubmit }: Props) {
   const [title, setTitle] = useState(initial?.title ?? '');
@@ -18,11 +20,9 @@ export default function ProductForm({ initial, onSubmit }: Props) {
   const [color, setColor] = useState(initial?.color ?? '');
   const [priceMrp, setPriceMrp] = useState(initial?.priceMrp ?? 0);
   const [priceSale, setPriceSale] = useState(initial?.priceSale ?? 0);
-  const [images, setImages] = useState((initial?.images ?? []).join(','));
+  const [images, setImages] = useState(initial?.images?.[0] ?? ''); // ✅ only 1 image
   const [active, setActive] = useState(initial?.active ?? true);
 
-  // Keep state typed as Variant[] (your original logic),
-  // but ensure any locally-created variant has an id (temp id).
   const [variants, setVariants] = useState<Variant[]>(
     initial?.variants ?? [{ id: genTmpId(), size: 'S', sku: '', stockQty: 0 }]
   );
@@ -30,10 +30,54 @@ export default function ProductForm({ initial, onSubmit }: Props) {
   const [saving, setSaving] = useState(false);
 
   const addVariant = () =>
-    setVariants((v) => [...v, { id: genTmpId(), size: '', sku: '', stockQty: 0 }]);
+    setVariants((v) => [
+      ...v,
+      { id: genTmpId(), size: '', sku: '', stockQty: 0 },
+    ]);
 
   const removeVariant = (idx: number) =>
     setVariants((v) => v.filter((_, i) => i !== idx));
+
+  // ⬇️ Upload handler with DB update (replace old image)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const filePath = `${Date.now()}-${file.name}`;
+
+    const { error } = await supabase.storage
+      .from('products')
+      .upload(filePath, file, { upsert: true });
+
+    if (error) {
+      console.error('Upload failed', error);
+      alert('Image upload failed');
+      return;
+    }
+
+    const publicUrl = getPublicUrl('products', filePath);
+
+    // ✅ Replace previous image (local preview)
+    setImages(publicUrl);
+
+    // ✅ Also update DB if product already exists
+    if (initial?.id) {
+      try {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE}/admin/products/${initial.id}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              images: [publicUrl], // ✅ always overwrite
+            }),
+          }
+        );
+      } catch (err) {
+        console.error('Failed to save image URL to DB', err);
+      }
+    }
+  };
 
   async function submit() {
     setSaving(true);
@@ -46,21 +90,20 @@ export default function ProductForm({ initial, onSubmit }: Props) {
         color,
         priceMrp: Number(priceMrp),
         priceSale: Number(priceSale),
-        images: images
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        images: images ? [images] : [], // ✅ single image only
         active,
-        // Keep your original mapping, but drop temp ids so the API
-        // treats them as new variants.
         variants: variants.map((v) => {
           const base = {
             size: v.size,
             sku: v.sku,
-            stockQty: Number.isFinite(v.stockQty) ? Math.max(0, Number(v.stockQty)) : 0,
+            stockQty: Number.isFinite(v.stockQty)
+              ? Math.max(0, Number(v.stockQty))
+              : 0,
           };
-          return v.id && !v.id.startsWith('tmp_') ? { id: v.id, ...base } : base;
-        }) as unknown as Variant[], // satisfies the existing onSubmit type
+          return v.id && !v.id.startsWith('tmp_')
+            ? { id: v.id, ...base }
+            : base;
+        }) as unknown as Variant[],
       };
 
       await onSubmit(payload);
@@ -133,13 +176,20 @@ export default function ProductForm({ initial, onSubmit }: Props) {
           />
         </label>
         <label className="col-span-2 flex flex-col gap-1">
-          <span>Images (comma separated URLs)</span>
+          <span>Image URL</span>
           <input
             className="border p-2 rounded"
             value={images}
             onChange={(e) => setImages(e.target.value)}
           />
         </label>
+
+        {/* File input for uploads */}
+        <label className="col-span-2 flex flex-col gap-1">
+          <span>Upload Image</span>
+          <input type="file" accept="image/*" onChange={handleFileChange} />
+        </label>
+
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -163,7 +213,10 @@ export default function ProductForm({ initial, onSubmit }: Props) {
         </div>
         <div className="space-y-2">
           {variants.map((v, idx) => (
-            <div key={v.id ?? `new-${idx}`} className="grid grid-cols-4 gap-2 items-end">
+            <div
+              key={v.id ?? `new-${idx}`}
+              className="grid grid-cols-4 gap-2 items-end"
+            >
               <label className="flex flex-col gap-1">
                 <span>Size</span>
                 <input
@@ -172,7 +225,9 @@ export default function ProductForm({ initial, onSubmit }: Props) {
                   onChange={(e) => {
                     const val = e.target.value;
                     setVariants((list) =>
-                      list.map((vv, i) => (i === idx ? { ...vv, size: val } : vv))
+                      list.map((vv, i) =>
+                        i === idx ? { ...vv, size: val } : vv
+                      )
                     );
                   }}
                 />
@@ -185,7 +240,9 @@ export default function ProductForm({ initial, onSubmit }: Props) {
                   onChange={(e) => {
                     const val = e.target.value;
                     setVariants((list) =>
-                      list.map((vv, i) => (i === idx ? { ...vv, sku: val } : vv))
+                      list.map((vv, i) =>
+                        i === idx ? { ...vv, sku: val } : vv
+                      )
                     );
                   }}
                 />
@@ -200,7 +257,9 @@ export default function ProductForm({ initial, onSubmit }: Props) {
                   onChange={(e) => {
                     const val = Math.max(0, Number(e.target.value) || 0);
                     setVariants((list) =>
-                      list.map((vv, i) => (i === idx ? { ...vv, stockQty: val } : vv))
+                      list.map((vv, i) =>
+                        i === idx ? { ...vv, stockQty: val } : vv
+                      )
                     );
                   }}
                 />

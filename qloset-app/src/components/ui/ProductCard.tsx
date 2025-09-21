@@ -8,8 +8,25 @@ type Product = {
   title: string;
   priceMrp: number;
   priceSale: number;
-  images: string[];
+  images?: any;
+  image?: string;
+  img?: string;
 };
+
+function firstImage(item: Product): string | undefined {
+  if (Array.isArray(item.images) && item.images.length) return item.images[0];
+  if (typeof item.images === 'string') {
+    try {
+      const arr = JSON.parse(item.images);
+      if (Array.isArray(arr) && arr[0]) return arr[0];
+    } catch {
+      if (/^https?:\/\//i.test(item.images)) return item.images;
+    }
+  }
+  if (typeof item.image === 'string') return item.image;
+  if (typeof item.img === 'string') return item.img;
+  return undefined;
+}
 
 export default function ProductCard({
   item,
@@ -18,13 +35,13 @@ export default function ProductCard({
   item: Product;
   onPress: () => void;
 }) {
-  const img = item.images?.[0];
+  const src = firstImage(item);
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
       <View style={styles.imgWrap}>
-        {img ? (
-          <Image source={{ uri: img }} style={styles.img} />
+        {src ? (
+          <Image source={{ uri: src }} style={styles.img} resizeMode="cover" />
         ) : (
           <View style={[styles.img, { backgroundColor: colors.line }]} />
         )}
@@ -53,11 +70,7 @@ export default function ProductCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
+  card: { backgroundColor: colors.card, borderRadius: 16, overflow: 'hidden' },
   imgWrap: { position: 'relative' },
   img: { width: '100%', height: 170 },
   badges: { position: 'absolute', top: 8, left: 8, flexDirection: 'row' },

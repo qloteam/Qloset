@@ -13,12 +13,24 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useWishlist } from "../state/WishlistContext";
 
-// 👇– type your root stack routes used from here
-type RootStackParamList = {
-  Product: { id: string };
-};
-
+type RootStackParamList = { Product: { id: string } };
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+function firstImageFromAny(obj: any): string | undefined {
+  const val = obj?.images;
+  if (Array.isArray(val) && val.length) return val[0];
+  if (typeof val === 'string') {
+    try {
+      const arr = JSON.parse(val);
+      if (Array.isArray(arr) && arr[0]) return arr[0];
+    } catch {
+      if (/^https?:\/\//i.test(val)) return val;
+    }
+  }
+  if (typeof obj?.image === 'string') return obj.image;
+  if (typeof obj?.img === 'string') return obj.img;
+  return undefined;
+}
 
 export default function WishlistScreen() {
   const navigation = useNavigation<Nav>();
@@ -43,28 +55,28 @@ export default function WishlistScreen() {
         <FlatList
           data={wishlist}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => navigation.navigate("Product", { id: item.id })}
-            >
-              <Image
-                source={
-                  item.images?.[0]
-                    ? { uri: item.images[0] }
-                    : require("../../assets/placeholder.png")
-                }
-                style={styles.img}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>{item.title}</Text>
-                <Text style={styles.price}>₹{item.priceSale}</Text>
-              </View>
-              <TouchableOpacity onPress={() => removeFromWishlist(item.id)}>
-                <Text style={styles.remove}>Remove</Text>
+          renderItem={({ item }) => {
+            const src = firstImageFromAny(item);
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() => navigation.navigate("Product", { id: item.id })}
+              >
+                <Image
+                  source={src ? { uri: src } : require("../../assets/placeholder.png")}
+                  style={styles.img}
+                  resizeMode="cover"
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>{item.title}</Text>
+                  <Text style={styles.price}>₹{item.priceSale}</Text>
+                </View>
+                <TouchableOpacity onPress={() => removeFromWishlist(item.id)}>
+                  <Text style={styles.remove}>Remove</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          )}
+            );
+          }}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           contentContainerStyle={{ paddingBottom: 24 }}
         />

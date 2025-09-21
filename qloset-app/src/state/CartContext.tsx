@@ -3,7 +3,7 @@ import * as React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../contexts/AuthContext";
 import { fetchCart, saveCart } from "../db/cart";
-import { confirmSequential } from "@/utils/promptQueue"; // ⬅️ queued confirmation
+import { confirmSequential } from "@/utils/promptQueue"; 
 import type { Product, Variant } from "../types";
 
 export type CartItem = {
@@ -13,6 +13,7 @@ export type CartItem = {
   variantId: string;
   size: string;
   qty: number;
+  images?: string[];   // 👈 added
   /** snapshot of available stock at the time of add (used to clamp setQty/increment) */
   variantStock?: number;
 };
@@ -35,7 +36,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [items, setItems] = React.useState<CartItem[]>([]);
 
-  // Helper: dedupe by product+variant (sum qtys)
   const mergeDedup = (a: CartItem[], b: CartItem[]) => {
     const map = new Map<string, CartItem>();
     const push = (list: CartItem[]) => {
@@ -51,7 +51,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return Array.from(map.values());
   };
 
-  // Load cart on mount / when auth changes
   React.useEffect(() => {
     let cancelled = false;
 
@@ -62,7 +61,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const guestItems: CartItem[] = rawGuest ? JSON.parse(rawGuest) : [];
 
         if (!cancelled && guestItems.length > 0) {
-          // ⬇️ queued dialog so it runs after the wishlist prompt, not on top of it
           const accepted = await confirmSequential({
             title: "Keep items in your cart?",
             message: `You added ${guestItems.length} ${
@@ -91,7 +89,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Not signed in: load guest cart
       const raw = await AsyncStorage.getItem(GUEST_KEY);
       const guestItems = raw ? JSON.parse(raw) : [];
       if (!cancelled) setItems(guestItems);
@@ -102,7 +99,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user]);
 
-  // Persist whenever items change (debounced)
   React.useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null;
 
@@ -120,7 +116,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, [items, user]);
 
-  // If user signs out, empty the in-memory cart and guest storage
   React.useEffect(() => {
     if (!user) {
       (async () => {
@@ -130,11 +125,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  // --- Mutators with stock clamps (no numbers shown to the user) ---
-
+  // --- Mutators with stock clamps ---
   const add = (p: Product, v: Variant, qty = 1) => {
     setItems((prev) => {
-      // determine available stock for this variant (if provided)
       const available = Number.isFinite((v as any)?.stockQty)
         ? Math.max(0, Number((v as any).stockQty))
         : Number.POSITIVE_INFINITY;
@@ -144,14 +137,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       if (i >= 0) {
         const nextQty = Math.min(prev[i].qty + qty, available);
-        if (nextQty === prev[i].qty) return prev; // already at cap
+        if (nextQty === prev[i].qty) return prev;
         const copy = [...prev];
         copy[i] = { ...copy[i], qty: nextQty, variantStock: available };
         return copy;
       }
 
       const startQty = Math.min(qty, available);
-      if (startQty <= 0) return prev; // OOS guard: don't add an empty line
+      if (startQty <= 0) return prev;
 
       return [
         ...prev,
@@ -166,6 +159,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           variantId: v.id,
           size: (v as any).size ?? "",
           qty: startQty,
+          images: (p as any).images ?? [],  // 👈 save product images here
           variantStock: available,
         },
       ];

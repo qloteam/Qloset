@@ -8,6 +8,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Dimensions,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
@@ -32,15 +33,13 @@ type Product = {
 export default function ProductScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "Product">>();
   const nav = useNavigation();
-  const { items: cartItems, add } = useCart() as any; // 👈 we read cart to enforce per-variant caps
+  const { items: cartItems, add } = useCart() as any;
 
   const [p, setP] = useState<Product | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
 
-  // Wishlist context
   const { wishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
-  // Load product
   useEffect(() => {
     (async () => {
       try {
@@ -54,13 +53,11 @@ export default function ProductScreen() {
     })();
   }, [route.params.id]);
 
-  // total stock across variants -> used only to disable Add to cart if the whole product is OOS
   const totalStock = useMemo(
     () => (p?.variants ?? []).reduce((s, v) => s + (v?.stockQty ?? 0), 0),
     [p?.variants]
   );
 
-  // is this product in wishlist?
   const isWishlisted = useMemo(
     () => (p ? wishlist.some((x) => x.id === p.id) : false),
     [wishlist, p?.id]
@@ -82,7 +79,6 @@ export default function ProductScreen() {
 
   if (!p) return <View style={{ flex: 1 }} />;
 
-  // Add to cart with stock guards (NO stock count shown to user)
   const addToCart = () => {
     if (totalStock <= 0) {
       Alert.alert("Out of stock", "This product is currently unavailable.");
@@ -95,13 +91,11 @@ export default function ProductScreen() {
     const v = p.variants.find((x) => x.id === selected);
     if (!v) return;
 
-    // Block adding if that size has zero
     if ((v.stockQty ?? 0) <= 0) {
       Alert.alert("Out of stock", "Selected size is unavailable.");
       return;
     }
 
-    // Enforce per-variant cap by comparing with what's already in the cart
     const inCartQty =
       (cartItems?.find((ci: any) => ci.variantId === v.id)?.qty as number) || 0;
 
@@ -117,12 +111,18 @@ export default function ProductScreen() {
   return (
     <ScrollView contentContainerStyle={styles.wrap}>
       {/* Images */}
-      <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={{ width: "100%" }}
+      >
         {(p.images?.length ? p.images : [null]).map((src, idx) => (
           <Image
             key={idx}
             source={src ? { uri: src } : require("../../assets/placeholder.png")}
             style={styles.hero}
+            resizeMode="cover" // ✅ fills the container
           />
         ))}
       </ScrollView>
@@ -142,7 +142,6 @@ export default function ProductScreen() {
 
         <Text style={styles.price}>₹{p.priceSale}</Text>
 
-        {/* If the entire product is OOS, show a simple badge (no numbers) */}
         {totalStock <= 0 ? <Text style={styles.oosProduct}>Out of stock</Text> : null}
 
         <Text style={styles.section}>Select size</Text>
@@ -176,8 +175,6 @@ export default function ProductScreen() {
           })}
         </View>
 
-        {/* 🔕 Removed the “6 left / X left” line on purpose */}
-
         <Button title="Add to cart" onPress={addToCart} disabled={totalStock <= 0} />
         <View style={{ height: 12 }} />
         <Button
@@ -197,9 +194,15 @@ export default function ProductScreen() {
   );
 }
 
+const W = Dimensions.get("window").width;
+
 const styles = StyleSheet.create({
   wrap: { paddingBottom: 32 },
-  hero: { width: 360, height: 360, backgroundColor: "#f3f3f3" },
+  hero: {
+    width: W,
+    height: W, // ✅ square, edge-to-edge
+    backgroundColor: "#f3f3f3",
+  },
   body: { padding: 16, gap: 12 },
 
   titleRow: {

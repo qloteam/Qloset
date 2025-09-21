@@ -1,10 +1,26 @@
 // src/screens/CartScreen.tsx
 import * as React from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useCart } from '../state/CartContext';
 import Button from '../components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
+
+function firstImageFromAny(obj: any): string | undefined {
+  const val = obj?.images;
+  if (Array.isArray(val) && val.length) return val[0];
+  if (typeof val === 'string') {
+    try {
+      const arr = JSON.parse(val);
+      if (Array.isArray(arr) && arr[0]) return arr[0];
+    } catch {
+      if (/^https?:\/\//i.test(val)) return val;
+    }
+  }
+  if (typeof obj?.image === 'string') return obj.image;
+  if (typeof obj?.img === 'string') return obj.img;
+  return undefined;
+}
 
 export default function CartScreen() {
   const { items, total, clear, setQty, remove } = useCart();
@@ -13,7 +29,6 @@ export default function CartScreen() {
 
   const [showSignInPrompt, setShowSignInPrompt] = React.useState(false);
 
-  // --- utilities to avoid "route not handled" errors ---
   const getNavChain = React.useCallback(() => {
     const chain: any[] = [];
     let nav: any = navigation;
@@ -44,27 +59,20 @@ export default function CartScreen() {
 
   const goToSignIn = React.useCallback(() => {
     setShowSignInPrompt(false);
-
-    // 1) Direct login screens (pick the one your app actually registered)
     if (safeNavigate('Login', { redirect: 'Checkout' })) return;
     if (safeNavigate('LoginScreen', { redirect: 'Checkout' })) return;
     if (safeNavigate('EmailAuthScreen', { redirect: 'Checkout' })) return;
-
-    // 2) If you have a dedicated Auth navigator, jump to it (its initialRoute is usually the login)
     if (safeNavigate('Auth')) return;
-
-    // 3) Last resort: go to Profile and let user tap Sign in there
-    //    (If you want auto-open, handle `openLogin` inside ProfileScreen)
     if (safeNavigate('Profile', { openLogin: true, redirect: 'Checkout' })) return;
     safeNavigate('ProfileScreen', { openLogin: true, redirect: 'Checkout' });
   }, [safeNavigate]);
 
   const handleCheckoutPress = () => {
     if (!user) {
-      setShowSignInPrompt(true); // block navigation if unsigned
+      setShowSignInPrompt(true);
       return;
     }
-    navigation.navigate('Checkout'); // unchanged for signed-in users
+    navigation.navigate('Checkout');
   };
 
   const renderItem = ({ item }: any) => {
@@ -72,13 +80,21 @@ export default function CartScreen() {
     const atMax = item.qty >= max && max !== Infinity;
     const atMin = item.qty <= 1;
 
+    // ✅ Prefer product.images, fallback to item.images
+    const imgSrc = firstImageFromAny(item.product || item);
+
     return (
       <View style={styles.row}>
+        <Image
+          source={imgSrc ? { uri: imgSrc } : require('../../assets/placeholder.png')}
+          style={styles.img}
+          resizeMode="cover"
+        />
+
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.meta}>{item.size}</Text>
 
-          {/* Qty controls (unchanged) */}
           <View style={styles.qtyRow}>
             <TouchableOpacity
               style={[styles.qtyBtn, atMin && styles.qtyBtnDisabled]}
@@ -128,7 +144,6 @@ export default function CartScreen() {
         <Text style={styles.clear}>Clear cart</Text>
       </TouchableOpacity>
 
-      {/* Sign-in required modal */}
       <Modal
         visible={showSignInPrompt}
         transparent
@@ -173,62 +188,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
   },
+  img: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#2A2A2F' },
   title: { fontWeight: '700', color: '#fff' },
   meta: { color: '#aaa', marginTop: 2 },
   price: { fontWeight: '700', color: '#fff' },
-  footer: {
-    borderTopWidth: 1,
-    borderTopColor: '#2A2A2F',
-    paddingTop: 12,
-    marginTop: 12,
-    gap: 12,
-  },
+  footer: { borderTopWidth: 1, borderTopColor: '#2A2A2F', paddingTop: 12, marginTop: 12, gap: 12 },
   total: { fontSize: 16, fontWeight: '800', color: '#fff' },
   empty: { color: '#aaa' },
   clear: { color: '#aaa' },
-
-  // Qty controls
   qtyRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 12 },
-  qtyBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#2A2A2F',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  qtyBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2A2A2F', alignItems: 'center', justifyContent: 'center' },
   qtyBtnDisabled: { opacity: 0.4 },
   qtyTxt: { fontSize: 18, fontWeight: '800', color: '#fff' },
   qtyVal: { minWidth: 24, textAlign: 'center', color: '#fff', fontWeight: '700' },
-
-  // Modal styles
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCard: {
-    width: '85%',
-    backgroundColor: '#1E1E22',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2A2A2F',
-  },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+  modalCard: { width: '85%', backgroundColor: '#1E1E22', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#2A2A2F' },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 6, textAlign: 'center' },
   modalSubtitle: { fontSize: 14, color: '#aaa', textAlign: 'center', marginBottom: 16 },
   modalRow: { flexDirection: 'row', gap: 10 },
-  modalBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-    minWidth: 120,
-    alignItems: 'center',
-  },
+  modalBtn: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, minWidth: 120, alignItems: 'center' },
   modalPrimary: { backgroundColor: '#FF3366' },
   modalPrimaryText: { color: '#fff', fontWeight: '800' },
   modalGhost: { backgroundColor: '#2A2A2F', borderWidth: 1, borderColor: '#3A3A40' },

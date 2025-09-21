@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -16,7 +26,10 @@ export class AdminProductsController {
   async get(@Param('id') id: string) {
     const p: any = await this.products.adminGet(id);
     // add computed total stock for the Inventory panel
-    const total = (p?.variants ?? []).reduce((sum: number, v: any) => sum + (v?.stockQty ?? 0), 0);
+    const total = (p?.variants ?? []).reduce(
+      (sum: number, v: any) => sum + (v?.stockQty ?? 0),
+      0,
+    );
     return { ...p, stock: total };
   }
 
@@ -25,13 +38,24 @@ export class AdminProductsController {
     return this.products.adminCreate(body);
   }
 
+  // NEW: add image URL to product.images
+  @Post(':id/images')
+  async addImage(@Param('id') id: string, @Body() body: { url: string }) {
+    if (!body?.url) {
+      throw new BadRequestException('Missing image URL');
+    }
+    return this.products.addImage(id, body.url);
+  }
+
   // Accept both normal product updates and `{ stock }` for Inventory box
   @Patch(':id')
   async update(@Param('id') id: string, @Body() body: any) {
     if (Object.prototype.hasOwnProperty.call(body, 'stock')) {
       const val = Number(body.stock);
       if (!Number.isInteger(val) || val < 0) {
-        throw new BadRequestException('stock must be a non-negative integer');
+        throw new BadRequestException(
+          'stock must be a non-negative integer',
+        );
       }
       const { stock } = await this.products.adminSetTotalStock(id, val);
       return { stock };

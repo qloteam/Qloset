@@ -8,9 +8,37 @@ type Item = {
   title: string;
   priceMrp?: number;
   priceSale?: number;
-  images: string[];
-  stock?: number; // total product stock (0 means all sizes OOS)
+  images?: any;   // ← can be string[], string (json), or undefined
+  image?: string; // ← some lists may send a single field
+  img?: string;
+  stock?: number;
 };
+
+function firstImage(item: Item): string | undefined {
+  // images as array
+  if (Array.isArray(item.images) && item.images.length > 0) {
+    return item.images[0];
+  }
+  // images as JSON string
+  if (typeof item.images === 'string') {
+    try {
+      const arr = JSON.parse(item.images);
+      if (Array.isArray(arr) && arr[0]) return arr[0];
+    } catch {
+      // if it's just a plain string URL, use it
+      if (/^https?:\/\//i.test(item.images)) return item.images;
+    }
+  }
+  // fallbacks commonly seen in lists
+  if (typeof item.image === 'string') return item.image;
+  if (typeof item.img === 'string') return item.img;
+  return undefined;
+}
+
+function formatMoney(n?: number) {
+  if (n == null) return '';
+  return `₹${Number(n).toFixed(0)}`;
+}
 
 export default function GridProductCard({
   item,
@@ -21,9 +49,7 @@ export default function GridProductCard({
   onPress?: () => void;
   accentColor?: string;
 }) {
-  const src = item.images?.[0];
-  const hasImg = !!src;
-
+  const src = firstImage(item);
   const sale = item.priceSale ?? item.priceMrp ?? 0;
   const mrp = item.priceMrp ?? item.priceSale ?? 0;
   const showStrike =
@@ -35,7 +61,7 @@ export default function GridProductCard({
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={[styles.card, isOOS && styles.cardOOS]}>
-      {hasImg ? (
+      {src ? (
         <Image source={{ uri: src }} style={styles.img} resizeMode="cover" />
       ) : (
         <View style={styles.placeholder} />
@@ -79,8 +105,3 @@ const styles = StyleSheet.create({
   sale: { fontWeight: '900', fontSize: 16 },
   mrp: { color: '#B3B3BB', textDecorationLine: 'line-through', fontSize: 15 },
 });
-
-function formatMoney(n?: number) {
-  if (n == null) return '';
-  return `$${Number(n).toFixed(2)}`;
-}
