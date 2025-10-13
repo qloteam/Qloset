@@ -1,6 +1,5 @@
-// src/screens/CheckoutScreen.tsx
-import { fetchProfile } from '@/db/profile';
-import * as React from 'react';
+import { fetchProfile } from "@/db/profile";
+import * as React from "react";
 import {
   View,
   Text,
@@ -12,23 +11,22 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-} from 'react-native';
-import * as Location from 'expo-location';
-import { useNavigation } from '@react-navigation/native';
-import { useCart } from '../state/CartContext';
-import { checkoutOrder, type CheckoutItem } from '../lib/api'; // ✅ safe helper
-import { supabase } from '@/lib/supabaseClient';
-import { useAuth } from '@/contexts/AuthContext';
+} from "react-native";
+import * as Location from "expo-location";
+import { useCart } from "../state/CartContext";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
+import { navigationRef, navigate } from "@/nav/navigationRef"; // ✅ import the global navigation ref
 
 export default function CheckoutScreen() {
-  const nav = useNavigation<any>();
-  const { items, total, clear } = useCart();
+  const { items, total } = useCart();
+  const { user } = useAuth();
 
-  const [name, setName] = React.useState('');
-  const [phone, setPhone] = React.useState('');
-  const [line1, setLine1] = React.useState('');
-  const [landmark, setLandmark] = React.useState('');
-  const [pincode, setPincode] = React.useState('');
+  const [name, setName] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [line1, setLine1] = React.useState("");
+  const [landmark, setLandmark] = React.useState("");
+  const [pincode, setPincode] = React.useState("");
 
   const [tbyb, setTbyb] = React.useState(true);
   const [lat, setLat] = React.useState<number | null>(null);
@@ -46,62 +44,31 @@ export default function CheckoutScreen() {
     is_default?: boolean | null;
   };
 
-  const { user } = useAuth();
   const [addresses, setAddresses] = React.useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = React.useState<string | null>(null);
 
-  // 🔒 Stronger guard: if unsigned, push to Auth instead of just alerting.
-  React.useEffect(() => {
-    if (user) return;
-
-    const tryNavigate = (name: string, params?: any) => {
-      try {
-        // @ts-ignore
-        nav.navigate(name, params);
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    if (tryNavigate('EmailAuthScreen', { redirect: 'Checkout' })) return;
-    if (tryNavigate('Login', { redirect: 'Checkout' })) return;
-    if (tryNavigate('LoginScreen', { redirect: 'Checkout' })) return;
-    if (tryNavigate('Auth')) return;
-
-    Alert.alert('Please sign-in to checkout');
-    // @ts-ignore
-    nav.goBack?.();
-  }, [user, nav]);
-
-  // 👤 Auto-fill name & phone for signed-in users
+  // 👤 Fetch user profile
   React.useEffect(() => {
     let alive = true;
     (async () => {
       if (!user) return;
       try {
         const prof = await fetchProfile(user.id);
-
         if (!alive) return;
 
         const pickedName =
           prof?.name ??
-          // @ts-ignore
           user.user_metadata?.full_name ??
-          // @ts-ignore
           user.user_metadata?.name ??
-          '';
+          "";
 
         const pickedPhone =
-          prof?.phone ??
-          // @ts-ignore
-          user.user_metadata?.phone ??
-          '';
+          prof?.phone ?? user.user_metadata?.phone ?? "";
 
         if (pickedName) setName((n) => (n ? n : pickedName));
         if (pickedPhone) setPhone((p) => (p ? p : String(pickedPhone)));
       } catch {
-        // ignore – user can still proceed
+        // ignore
       }
     })();
     return () => {
@@ -109,17 +76,17 @@ export default function CheckoutScreen() {
     };
   }, [user]);
 
-  // 📦 Load saved addresses for user
+  // 🏠 Load saved addresses
   React.useEffect(() => {
     let mounted = true;
     async function load() {
       if (!user) return;
       const { data, error } = await supabase
-        .from('addresses')
-        .select('id,label,line1,line2,pincode,is_default')
-        .eq('user_id', user.id)
-        .order('is_default', { ascending: false })
-        .order('created_at', { ascending: false });
+        .from("addresses")
+        .select("id,label,line1,line2,pincode,is_default")
+        .eq("user_id", user.id)
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: false });
 
       if (!mounted) return;
       if (!error && data) {
@@ -135,16 +102,17 @@ export default function CheckoutScreen() {
     };
   }, [user]);
 
+  // 📍 Autofill address
   const useMyLocation = async () => {
     try {
       setLocLoading(true);
       const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
+      if (status !== "granted") {
         return Alert.alert(
-          'Permission needed',
+          "Permission needed",
           canAskAgain
-            ? 'Please allow location so we can check serviceability at your address.'
-            : 'Location permission was denied. Enable it from Settings to auto-fill your address.'
+            ? "Please allow location so we can check serviceability at your address."
+            : "Location permission was denied. Enable it from Settings to auto-fill your address."
         );
       }
       const { coords } = await Location.getCurrentPositionAsync({
@@ -157,98 +125,55 @@ export default function CheckoutScreen() {
         const places = await Location.reverseGeocodeAsync(coords);
         const first = places?.[0];
         if (first?.postalCode) {
-          const onlyDigits = first.postalCode.replace(/\D/g, '').slice(0, 6);
+          const onlyDigits = first.postalCode.replace(/\D/g, "").slice(0, 6);
           if (onlyDigits) setPincode(onlyDigits);
         }
         if (!line1 && (first?.name || first?.street)) {
-          const addr = [first.name, first.street].filter(Boolean).join(' ');
+          const addr = [first.name, first.street].filter(Boolean).join(" ");
           if (addr) setLine1(addr);
         }
-      } catch {
-        /* ignore reverse geocode errors */
-      }
-
+      } catch {}
       Alert.alert(
-        'Location added',
+        "Location added",
         `Lat: ${coords.latitude.toFixed(5)}, Lng: ${coords.longitude.toFixed(5)}`
       );
     } catch (e: any) {
-      Alert.alert('Location error', String(e?.message || e));
+      Alert.alert("Location error", String(e?.message || e));
     } finally {
       setLocLoading(false);
     }
   };
 
-  const placeOrder = async () => {
-    // basic client validation (kept as you had)
-    if (!name.trim()) return Alert.alert('Please enter your name');
-    if (!/^\d{10}$/.test(phone)) return Alert.alert('Enter a valid 10-digit phone');
-    if (!line1.trim()) return Alert.alert('Please enter address line');
-    if (!/^\d{6}$/.test(pincode)) return Alert.alert('Enter a valid 6-digit pincode');
-    if (!items.length) return Alert.alert('Your cart is empty');
+  // 💳 Proceed to Payment
+  const handleProceedToPayment = () => {
+    if (!name.trim()) return Alert.alert("Please enter your name");
+    if (!/^\d{10}$/.test(phone)) return Alert.alert("Enter a valid 10-digit phone");
+    if (!line1.trim()) return Alert.alert("Please enter address line");
+    if (!/^\d{6}$/.test(pincode)) return Alert.alert("Enter a valid 6-digit pincode");
+    if (!items.length) return Alert.alert("Your cart is empty");
+    if (!selectedAddressId) return Alert.alert("Please select or enter an address");
 
-    if (!selectedAddressId) {
-      return Alert.alert('Please select or enter an address');
+    // ✅ Use global navigationRef (no parent navigator issues)
+    if (!navigationRef.isReady()) {
+      Alert.alert("Navigation not ready. Try again in a moment.");
+      return;
     }
 
-    try {
-      setLoading(true);
-
-      // 🔹 Build items for API
-      const checkoutItems: CheckoutItem[] = items.map((i: any) => {
-        const price =
-          typeof i.price === 'number'
-            ? i.price
-            : typeof i.priceSale === 'number'
-            ? i.priceSale
-            : typeof i.priceMrp === 'number'
-            ? i.priceMrp
-            : 0; // server recomputes anyway
-        return {
-          variantId: i.variantId,
-          qty: i.qty,
-          price,
-        };
-      });
-
-      // 🔹 Call race-safe checkout
-      const orderRes = await checkoutOrder({
-        addressId: selectedAddressId,
-        items: checkoutItems,
-        tbyb,
-        // token: authToken, // add if your API requires auth header
-      });
-
-      // normalize shape and show success
-      const ord: any = orderRes;
-      const orderId = ord?.id ?? ord?.orderId ?? '—';
-      const subtotal = ord?.subtotal ?? total ?? 0;
-
-      clear();
-      Alert.alert(
-        'Order placed',
-        `Order ID: ${orderId}\nTotal: ₹${subtotal}\nTBYB: ${tbyb ? 'Yes' : 'No'}`
-      );
-    } catch (e: any) {
-      if (e?.status === 409) {
-        Alert.alert(
-          'Out of stock',
-          'One or more items just went out of stock. Please review your cart.'
-        );
-      } else {
-        Alert.alert('Checkout failed', String(e?.message || e));
-      }
-    } finally {
-      setLoading(false);
-    }
+    navigate("Payment", {
+      total,
+      addressId: selectedAddressId,
+      tbyb,
+      name,
+      phone,
+    });
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#121216', paddingTop: 70 }}>
+    <View style={{ flex: 1, backgroundColor: "#121216", paddingTop: 70 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.h1}>Checkout</Text>
@@ -256,58 +181,24 @@ export default function CheckoutScreen() {
           {/* Contact */}
           <View style={styles.card}>
             <Text style={styles.section}>Contact</Text>
-
             {user ? (
               <>
                 <View style={styles.readonlyRow}>
                   <Text style={styles.readonlyLabel}>Name</Text>
-                  <Text style={styles.readonlyValue}>{name || '—'}</Text>
+                  <Text style={styles.readonlyValue}>{name || "—"}</Text>
                 </View>
                 <View style={styles.readonlyRow}>
                   <Text style={styles.readonlyLabel}>Phone</Text>
-                  <Text style={styles.readonlyValue}>{phone || '—'}</Text>
+                  <Text style={styles.readonlyValue}>{phone || "—"}</Text>
                 </View>
-                {/* If you want to allow editing here, switch to inputs with editable={false} */}
               </>
-            ) : (
-              <>
-                <TextInput
-                  placeholder="Full name"
-                  placeholderTextColor="#888"
-                  value={name}
-                  onChangeText={setName}
-                  style={styles.input}
-                />
-                <TextInput
-                  placeholder="Phone (10 digits)"
-                  placeholderTextColor="#888"
-                  keyboardType="number-pad"
-                  value={phone}
-                  onChangeText={setPhone}
-                  style={styles.input}
-                  maxLength={10}
-                />
-                <TouchableOpacity
-                  onPress={() => {
-                    try {
-                      // @ts-ignore
-                      nav.navigate('EmailAuthScreen', { redirect: 'Checkout' });
-                    } catch {
-                      Alert.alert('Please sign-in to continue');
-                    }
-                  }}
-                  style={[styles.cta, { marginTop: 4 }]}
-                >
-                  <Text style={styles.ctaText}>Sign in / Sign up</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            ) : null}
           </View>
 
           {/* Address */}
           <View style={styles.card}>
             <Text style={styles.section}>Address</Text>
-            {user && addresses.length > 0 ? (
+            {user && addresses.length > 0 && (
               <View style={{ marginBottom: 8 }}>
                 <Text style={[styles.subheading]}>Use this address</Text>
                 {addresses.map((a) => {
@@ -319,20 +210,20 @@ export default function CheckoutScreen() {
                       style={[
                         styles.addressBox,
                         {
-                          borderColor: selected ? '#FF3366' : '#2A2A2F',
-                          backgroundColor: selected ? '#1E1E22' : '#2A2A2F',
+                          borderColor: selected ? "#FF3366" : "#2A2A2F",
+                          backgroundColor: selected ? "#1E1E22" : "#2A2A2F",
                         },
                       ]}
                     >
-                      <Text style={{ fontWeight: '700', color: '#fff' }}>
-                        {a.label ? `${a.label} — ` : ''}
+                      <Text style={{ fontWeight: "700", color: "#fff" }}>
+                        {a.label ? `${a.label} — ` : ""}
                         {a.line1}
                       </Text>
-                      {a.line2 ? <Text style={{ color: '#aaa' }}>{a.line2}</Text> : null}
-                      <Text style={{ color: '#aaa' }}>{a.pincode}</Text>
-                      {a.is_default ? (
-                        <Text style={{ color: '#10B981', marginTop: 4 }}>Default</Text>
-                      ) : null}
+                      {a.line2 ? <Text style={{ color: "#aaa" }}>{a.line2}</Text> : null}
+                      <Text style={{ color: "#aaa" }}>{a.pincode}</Text>
+                      {a.is_default && (
+                        <Text style={{ color: "#10B981", marginTop: 4 }}>Default</Text>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -340,15 +231,15 @@ export default function CheckoutScreen() {
                   onPress={() => {
                     const chosen = addresses.find((x) => x.id === selectedAddressId);
                     if (!chosen) return;
-                    setLine1(chosen.line1 || '');
-                    setPincode(chosen.pincode || '');
+                    setLine1(chosen.line1 || "");
+                    setPincode(chosen.pincode || "");
                   }}
                   style={styles.useBtn}
                 >
-                  <Text style={{ color: 'white', fontWeight: '800' }}>Use selected address</Text>
+                  <Text style={{ color: "white", fontWeight: "800" }}>Use selected address</Text>
                 </TouchableOpacity>
               </View>
-            ) : null}
+            )}
 
             <TextInput
               placeholder="Address line"
@@ -364,7 +255,7 @@ export default function CheckoutScreen() {
               onChangeText={setLandmark}
               style={styles.input}
             />
-            <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flexDirection: "row", gap: 12 }}>
               <TextInput
                 placeholder="Pincode"
                 placeholderTextColor="#888"
@@ -378,7 +269,7 @@ export default function CheckoutScreen() {
                 {locLoading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ fontWeight: '700', color: '#fff' }}>Use my location</Text>
+                  <Text style={{ fontWeight: "700", color: "#fff" }}>Use my location</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -392,7 +283,7 @@ export default function CheckoutScreen() {
           {/* TBYB */}
           <View style={styles.card}>
             <Text style={styles.section}>Try Before You Buy</Text>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flexDirection: "row", gap: 12 }}>
               <TouchableOpacity
                 style={[styles.toggle, tbyb && styles.toggleOn]}
                 onPress={() => setTbyb(true)}
@@ -411,17 +302,17 @@ export default function CheckoutScreen() {
           {/* Summary */}
           <View style={styles.card}>
             <Text style={styles.section}>Summary</Text>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
               Total: ₹{total}
             </Text>
           </View>
 
           {/* CTA */}
-          <TouchableOpacity style={styles.cta} onPress={placeOrder} disabled={loading}>
+          <TouchableOpacity style={styles.cta} onPress={handleProceedToPayment} disabled={loading}>
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.ctaText}>Place order</Text>
+              <Text style={styles.ctaText}>Proceed to Payment</Text>
             )}
           </TouchableOpacity>
 
@@ -433,46 +324,37 @@ export default function CheckoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    padding: 16,
-    rowGap: 12,
-    paddingBottom: 32,
-  },
-  card: {
-    backgroundColor: '#1E1E22',
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-  },
-  h1: { fontSize: 28, fontWeight: '900', marginBottom: 4, color: '#fff' },
-  section: { fontSize: 16, fontWeight: '800', marginBottom: 6, color: '#fff' },
-  subheading: { fontWeight: '700', fontSize: 14, marginBottom: 8, color: '#fff' },
+  scroll: { padding: 16, rowGap: 12, paddingBottom: 32 },
+  card: { backgroundColor: "#1E1E22", borderRadius: 14, padding: 14, gap: 10 },
+  h1: { fontSize: 28, fontWeight: "900", marginBottom: 4, color: "#fff" },
+  section: { fontSize: 16, fontWeight: "800", marginBottom: 6, color: "#fff" },
+  subheading: { fontWeight: "700", fontSize: 14, marginBottom: 8, color: "#fff" },
   input: {
-    backgroundColor: '#2A2A2F',
-    color: '#fff',
+    backgroundColor: "#2A2A2F",
+    color: "#fff",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   locBtn: {
-    backgroundColor: '#2A2A2F',
+    backgroundColor: "#2A2A2F",
     borderRadius: 12,
     paddingHorizontal: 12,
-    justifyContent: 'center',
+    justifyContent: "center",
     minWidth: 140,
-    alignItems: 'center',
+    alignItems: "center",
   },
-  coords: { marginTop: 6, color: '#aaa' },
+  coords: { marginTop: 6, color: "#aaa" },
   toggle: {
     flex: 1,
     borderRadius: 12,
     paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: '#2A2A2F',
+    alignItems: "center",
+    backgroundColor: "#2A2A2F",
   },
-  toggleOn: { backgroundColor: '#FF3366' },
-  toggleText: { fontWeight: '700', color: '#aaa' },
-  toggleTextOn: { color: '#fff' },
+  toggleOn: { backgroundColor: "#FF3366" },
+  toggleText: { fontWeight: "700", color: "#aaa" },
+  toggleTextOn: { color: "#fff" },
   addressBox: {
     padding: 12,
     borderRadius: 12,
@@ -482,28 +364,26 @@ const styles = StyleSheet.create({
   useBtn: {
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#FF3366',
-    alignItems: 'center',
+    backgroundColor: "#FF3366",
+    alignItems: "center",
     marginBottom: 6,
   },
   cta: {
-    backgroundColor: '#FF3366',
+    backgroundColor: "#FF3366",
     borderRadius: 16,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 16,
   },
-  ctaText: { color: '#fff', fontWeight: '900', fontSize: 18 },
-
-  // New read-only styles
+  ctaText: { color: "#fff", fontWeight: "900", fontSize: 18 },
   readonlyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#333',
+    borderBottomColor: "#333",
   },
-  readonlyLabel: { color: '#bbb' },
-  readonlyValue: { color: '#fff', fontWeight: '600' },
+  readonlyLabel: { color: "#bbb" },
+  readonlyValue: { color: "#fff", fontWeight: "600" },
 });

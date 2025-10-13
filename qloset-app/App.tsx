@@ -1,18 +1,17 @@
 // App.tsx
 import "react-native-gesture-handler";
 import * as React from "react";
-import { View, Text } from "react-native"; // ✅ for badge + icons
+import { View, Text } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
 // Contexts
-import { CartProvider } from "./src/state/CartContext";
+import { CartProvider, useCart } from "./src/state/CartContext";
 import { ThemeProvider } from "./src/state/ThemeContext";
 import { AuthProvider } from "./src/contexts/AuthContext";
 import { WishlistProvider } from "./src/state/WishlistContext";
-import { useCart } from "./src/state/CartContext"; // ✅ we’ll use this inside Tabs()
 
 // Screens
 import HomeScreen from "./src/screens/HomeScreen";
@@ -22,7 +21,8 @@ import ProfileScreen from "./src/screens/ProfileScreen";
 import ProductScreen from "./src/screens/ProductScreen";
 import CheckoutScreen from "./src/screens/CheckoutScreen";
 import SplashScreen from "./src/screens/SplashScreen";
-
+import PaymentScreen from "./src/screens/PaymentScreen";
+import OrderConfirmationScreen from "./src/screens/OrderConfirmationScreen";
 
 // Profile sub-pages
 import AppearanceScreen from "./src/screens/AppearanceScreen";
@@ -33,11 +33,14 @@ import TermsScreen from "./src/screens/TermsScreen";
 import PrivacyScreen from "./src/screens/PrivacyScreen";
 import WishlistScreen from "./src/screens/WishlistScreen";
 
+// 🧭 Global navigation ref (fixes “Unable to find parent navigator”)
+import { navigationRef } from "./src/nav/navigationRef";
+
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 const ProfileStackNav = createNativeStackNavigator();
 
-/** Small helper: overlay a rounded badge in the icon’s top-right corner */
+/* 🏷️ Badge Icon Component */
 function BadgeIcon({
   children,
   count,
@@ -47,7 +50,6 @@ function BadgeIcon({
   count: number;
   size: number;
 }) {
-  // Position scales with size so it sits nicely on all DPIs
   const right = Math.max(8, Math.round(size * 0.38));
   const top = -Math.max(4, Math.round(size * 0.25));
 
@@ -73,14 +75,21 @@ function BadgeIcon({
             height: 16,
             paddingHorizontal: 4,
             borderRadius: 8,
-            backgroundColor: "#FF3366", // your accent
+            backgroundColor: "#FF3366",
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 1,
-            borderColor: "rgba(255,255,255,0.85)", // subtle ring
+            borderColor: "rgba(255,255,255,0.85)",
           }}
         >
-          <Text style={{ color: "white", fontSize: 10, fontWeight: "800", lineHeight: 12 }}>
+          <Text
+            style={{
+              color: "white",
+              fontSize: 10,
+              fontWeight: "800",
+              lineHeight: 12,
+            }}
+          >
             {count > 99 ? "99+" : count}
           </Text>
         </View>
@@ -89,7 +98,7 @@ function BadgeIcon({
   );
 }
 
-// ✅ Profile stack
+/* 👤 Profile Stack */
 function ProfileStack() {
   return (
     <ProfileStackNav.Navigator>
@@ -109,10 +118,9 @@ function ProfileStack() {
   );
 }
 
-// ✅ Bottom tabs with a custom Cart badge
+/* 🧭 Bottom Tabs */
 function Tabs() {
-  const { count = 0 } = useCart(); // live cart count
-
+  const { count = 0 } = useCart();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -127,7 +135,9 @@ function Tabs() {
         component={HomeScreen}
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home" size={size} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -135,7 +145,9 @@ function Tabs() {
         component={ExploreScreen}
         options={{
           title: "Explore",
-          tabBarIcon: ({ color, size }) => <Ionicons name="compass" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="compass" size={size} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -143,10 +155,13 @@ function Tabs() {
         component={CartScreen}
         options={{
           title: "Cart",
-          // ⚠️ Do NOT set tabBarBadge here; we draw our own badge.
           tabBarIcon: ({ color, size }) => (
             <BadgeIcon count={count} size={size}>
-              <Ionicons name={count > 0 ? "cart" : "cart-outline"} size={size} color={color} />
+              <Ionicons
+                name={count > 0 ? "cart" : "cart-outline"}
+                size={size}
+                color={color}
+              />
             </BadgeIcon>
           ),
         }}
@@ -156,28 +171,52 @@ function Tabs() {
         component={ProfileStack}
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person" size={size} color={color} />
+          ),
         }}
       />
     </Tab.Navigator>
   );
 }
 
-// ✅ Root stack (MainTabs + product/checkout)
+/* 🚀 Root App Stack */
 export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
         <ThemeProvider>
           <WishlistProvider>
-            <NavigationContainer>
-              <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
+            {/* ✅ Attach global navigation ref */}
+            <NavigationContainer ref={navigationRef}>
+              <Stack.Navigator
+                screenOptions={{ headerShown: false }}
+                initialRouteName="Splash"
+              >
+                {/* Startup */}
                 <Stack.Screen name="Splash" component={SplashScreen} />
+
+                {/* Main Tabs */}
                 <Stack.Screen name="MainTabs" component={Tabs} />
+
+                {/* Product & Checkout Flow */}
                 <Stack.Screen name="Product" component={ProductScreen} />
-                <Stack.Screen name="Wishlist" component={WishlistScreen} />
                 <Stack.Screen name="Checkout" component={CheckoutScreen} />
-                
+
+                {/* ✅ Payment + Confirmation */}
+                <Stack.Screen
+                  name="Payment"
+                  component={PaymentScreen}
+                  options={{ headerShown: true, title: "Payment" }}
+                />
+                <Stack.Screen
+                  name="OrderConfirmation"
+                  component={OrderConfirmationScreen}
+                  options={{ headerShown: false }}
+                />
+
+                {/* Optional Wishlist */}
+                <Stack.Screen name="Wishlist" component={WishlistScreen} />
               </Stack.Navigator>
             </NavigationContainer>
           </WishlistProvider>
