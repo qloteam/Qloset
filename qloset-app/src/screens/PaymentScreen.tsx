@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { color, radius, shadow, spacing } from '../theme/tokens';
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { color, radius, shadow, spacing } from "../theme/tokens";
+import { supabase } from "@/lib/supabaseClient";
+import { useCart } from "../state/CartContext";
 
-// 🧭 Type definition for params received from CheckoutScreen
+// 🧭 Route params
 type PaymentRouteParams = {
   total?: number;
   tbyb?: boolean;
@@ -13,54 +23,118 @@ type PaymentRouteParams = {
 };
 
 const PAYMENT_OPTIONS = [
-  { id: 'cod', label: 'Cash on Delivery' },
-  { id: 'upi', label: 'UPI' },
-  { id: 'credit', label: 'Credit Card' },
-  { id: 'debit', label: 'Debit Card' },
+  { id: "cod", label: "Cash on Delivery" },
+  { id: "upi", label: "UPI" },
+  { id: "credit", label: "Credit Card" },
+  { id: "debit", label: "Debit Card" },
 ];
 
 export default function PaymentScreen() {
   const [selected, setSelected] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const navigation = useNavigation();
-
-  // ✅ Correctly typed useRoute for params (this line fixes your error)
+  const { items, clear } = useCart();
   const route = useRoute() as { params?: PaymentRouteParams };
-  const { total, tbyb, name, phone } = route.params || {};
+  const { total, tbyb, name, phone, addressId } = route.params || {};
 
-  // ⚙️ Handle confirmation of payment
+  // 🧾 Handle confirm payment
   const handleConfirm = async () => {
-    if (!selected) return Alert.alert('Please select a payment method');
+    if (!selected) return Alert.alert("Please select a payment method");
 
-    // 💰 COD → confirm instantly
-    if (selected === 'cod') {
-      Alert.alert(
-        'Order Placed',
-        `Your order has been placed successfully with Cash on Delivery.\nTotal: ₹${total}`
-      );
-      navigation.navigate('OrderConfirmation' as never);
+    // ✅ COD flow
+    if (selected === "cod") {
+      try {
+        setLoading(true);
+
+        // ✅ Get current session from Supabase
+        const { data: authData } = await supabase.auth.getSession();
+        const session = authData.session;
+        if (!session) {
+          Alert.alert("Login Required", "Please sign in to place your order.");
+          return;
+        }
+
+        // 🧠 Debug token details
+        const token = session.access_token;
+        console.log("🔑 FULL TOKEN LENGTH:", token?.length);
+        console.log("🔑 TOKEN START:", token?.slice(0, 30));
+        console.log("🔑 TOKEN END:", token?.slice(-30));
+
+        if (token?.startsWith("eyJhbGciOiJI")) {
+          console.warn("⚠️ Detected HS256 (HMAC) token — still anon or old session.");
+        } else if (token?.startsWith("eyJhbGciOiRS")) {
+          console.log("✅ Detected RS256 (RSA) token — good Supabase user session.");
+        }
+
+        // ✅ Prepare order payload
+        const payload = {
+          addressId,
+          items: items.map((it) => ({
+            variantId: it.variantId,
+            qty: it.qty || 1,
+          })),
+          tbyb,
+        };
+
+        // ✅ Build safe API URL
+        const apiBase =
+          process.env.EXPO_PUBLIC_API_BASE?.replace(/\/+$/, "") ||
+          "http://172.20.10.3:3001";
+        const url = `${apiBase}/orders`;
+
+        console.log("DEBUG URL:", url);
+        console.log("PAYLOAD:", payload);
+
+        // ✅ Send to backend
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const rawText = await res.text();
+        console.log("STATUS:", res.status, res.statusText);
+        console.log("RAW BODY:", rawText);
+
+        // ✅ Parse safely
+        let body: any = null;
+        try {
+          body = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          console.warn("Could not parse JSON response");
+        }
+
+        if (!res.ok) {
+          const msg =
+            body?.error ||
+            body?.message ||
+            `HTTP ${res.status} ${res.statusText}`;
+          throw new Error(msg);
+        }
+
+        // ✅ Success
+        clear();
+        (navigation as any).navigate("OrderConfirmation", {
+          paymentMethod: "Cash on Delivery",
+          total: total || 0,
+        });
+      } catch (err: any) {
+        console.error("Order creation error:", err);
+        Alert.alert("Error", `Failed to place order.\n\n${err.message}`);
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    // 💳 Other payment methods → placeholder API call
-    try {
-      await fetch('http://localhost:3001/orders/payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paymentMethod: selected,
-          total,
-          tbyb,
-          name,
-          phone,
-        }),
-      });
-
-      Alert.alert('Payment Successful', `Total paid: ₹${total}`);
-      navigation.navigate('OrderConfirmation' as never);
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Failed to process payment. Please try again.');
-    }
+    // 💳 Other payment methods placeholder
+    Alert.alert(
+      "Payment Pending",
+      "Online payments (UPI/Cards) will be available soon."
+    );
   };
 
   return (
@@ -73,7 +147,7 @@ export default function PaymentScreen() {
         <Text style={styles.summaryText}>Phone: {phone}</Text>
         <Text style={styles.summaryText}>Total: ₹{total}</Text>
         <Text style={styles.summaryText}>
-          Try Before You Buy: {tbyb ? 'Yes' : 'No'}
+          Try Before You Buy: {tbyb ? "Yes" : "No"}
         </Text>
       </View>
 
@@ -103,8 +177,16 @@ export default function PaymentScreen() {
         contentContainerStyle={{ paddingBottom: spacing(4) }}
       />
 
-      <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
-        <Text style={styles.confirmText}>Confirm Payment</Text>
+      <TouchableOpacity
+        style={[styles.confirmBtn, loading && { opacity: 0.7 }]}
+        onPress={handleConfirm}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color={color.bg} />
+        ) : (
+          <Text style={styles.confirmText}>Confirm Payment</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -119,13 +201,13 @@ const styles = StyleSheet.create({
   header: {
     color: color.text,
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: "700",
     marginBottom: spacing(2),
   },
   subheader: {
     color: color.text,
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: spacing(1),
     marginTop: spacing(2),
   },
@@ -163,18 +245,18 @@ const styles = StyleSheet.create({
   },
   optionTextSelected: {
     color: color.text,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   confirmBtn: {
     marginTop: spacing(2),
     backgroundColor: color.text,
     paddingVertical: spacing(2),
     borderRadius: radius.md,
-    alignItems: 'center',
+    alignItems: "center",
   },
   confirmText: {
     color: color.bg,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
