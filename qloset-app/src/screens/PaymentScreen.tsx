@@ -41,88 +41,56 @@ export default function PaymentScreen() {
   const handleConfirm = async () => {
     if (!selected) return Alert.alert("Please select a payment method");
 
-    // ✅ COD flow
+    // ✅ COD flow using Supabase directly
     if (selected === "cod") {
       try {
         setLoading(true);
 
-        // ✅ Get current session from Supabase
-        const { data: authData } = await supabase.auth.getSession();
-        const session = authData.session;
-        if (!session) {
+        // 🔐 Check if user is logged in
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError || !authData?.user) {
           Alert.alert("Login Required", "Please sign in to place your order.");
           return;
         }
 
-        // 🧠 Debug token details
-        const token = session.access_token;
-        console.log("🔑 FULL TOKEN LENGTH:", token?.length);
-        console.log("🔑 TOKEN START:", token?.slice(0, 30));
-        console.log("🔑 TOKEN END:", token?.slice(-30));
+        const user = authData.user;
+        console.log("🧍 User ID:", user.id);
 
-        if (token?.startsWith("eyJhbGciOiJI")) {
-          console.warn("⚠️ Detected HS256 (HMAC) token — still anon or old session.");
-        } else if (token?.startsWith("eyJhbGciOiRS")) {
-          console.log("✅ Detected RS256 (RSA) token — good Supabase user session.");
-        }
+        // 🧮 Calculate total in paise (₹ → paise)
+        const totalInPaise = Math.round((total || 0) * 100);
 
-        // ✅ Prepare order payload
-        const payload = {
-          addressId,
+        // 🧾 Build order payload (matches your 'orders' table)
+        const orderData = {
+          user_id: user.id,
+          address_id: addressId,
           items: items.map((it) => ({
             variantId: it.variantId,
             qty: it.qty || 1,
           })),
-          tbyb,
+          tbyb: !!tbyb,
+          payment_method: "COD",
+          total_in_paise: totalInPaise,
         };
 
-        // ✅ Build safe API URL
-        const apiBase =
-          process.env.EXPO_PUBLIC_API_BASE?.replace(/\/+$/, "") ||
-          "http://172.20.10.3:3001";
-        const url = `${apiBase}/orders`;
+        console.log("🧾 Inserting order:", orderData);
 
-        console.log("DEBUG URL:", url);
-        console.log("PAYLOAD:", payload);
+        // 🪄 Insert into Supabase
+        const { data, error } = await supabase
+          .from("orders")
+          .insert(orderData)
+          .select()
+          .single();
 
-        // ✅ Send to backend
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
+        if (error) throw error;
+        console.log("✅ Order created:", data);
 
-        const rawText = await res.text();
-        console.log("STATUS:", res.status, res.statusText);
-        console.log("RAW BODY:", rawText);
-
-        // ✅ Parse safely
-        let body: any = null;
-        try {
-          body = rawText ? JSON.parse(rawText) : null;
-        } catch {
-          console.warn("Could not parse JSON response");
-        }
-
-        if (!res.ok) {
-          const msg =
-            body?.error ||
-            body?.message ||
-            `HTTP ${res.status} ${res.statusText}`;
-          throw new Error(msg);
-        }
-
-        // ✅ Success
         clear();
         (navigation as any).navigate("OrderConfirmation", {
           paymentMethod: "Cash on Delivery",
           total: total || 0,
         });
       } catch (err: any) {
-        console.error("Order creation error:", err);
+        console.error("❌ Order creation error:", err);
         Alert.alert("Error", `Failed to place order.\n\n${err.message}`);
       } finally {
         setLoading(false);
@@ -130,11 +98,8 @@ export default function PaymentScreen() {
       return;
     }
 
-    // 💳 Other payment methods placeholder
-    Alert.alert(
-      "Payment Pending",
-      "Online payments (UPI/Cards) will be available soon."
-    );
+    // 💳 Placeholder for upcoming payment methods
+    Alert.alert("Payment Pending", "Online payments (UPI/Cards) will be available soon.");
   };
 
   return (

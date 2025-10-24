@@ -13,14 +13,18 @@ import {
   ScrollView,
 } from "react-native";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCart } from "../state/CartContext";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
-import { navigationRef, navigate } from "@/nav/navigationRef"; // ✅ import the global navigation ref
+import { navigationRef, navigate } from "@/nav/navigationRef";
+import { useRoute } from "@react-navigation/native"; // ✅ added
 
 export default function CheckoutScreen() {
   const { items, total } = useCart();
   const { user } = useAuth();
+  const route = useRoute(); // ✅ added
+  const addressParam: any = (route.params as any)?.address || null; // ✅ get address param
 
   const [name, setName] = React.useState("");
   const [phone, setPhone] = React.useState("");
@@ -46,6 +50,7 @@ export default function CheckoutScreen() {
 
   const [addresses, setAddresses] = React.useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = React.useState<string | null>(null);
+  const [selectedAddress, setSelectedAddress] = React.useState<SavedAddress | null>(null); // ✅ track actual address
 
   // 👤 Fetch user profile
   React.useEffect(() => {
@@ -76,7 +81,7 @@ export default function CheckoutScreen() {
     };
   }, [user]);
 
-  // 🏠 Load saved addresses
+  // 🏠 Load saved addresses + prefill from param or persisted
   React.useEffect(() => {
     let mounted = true;
     async function load() {
@@ -95,6 +100,26 @@ export default function CheckoutScreen() {
         const def = list.find((a) => a.is_default);
         setSelectedAddressId(def?.id ?? list[0]?.id ?? null);
       }
+
+      // ✅ handle passed address param (from Addresses screen)
+      if (addressParam) {
+        setSelectedAddress(addressParam);
+        setLine1(addressParam.line1 || "");
+        setPincode(addressParam.pincode || "");
+        await AsyncStorage.setItem("lastAddress", JSON.stringify(addressParam));
+        return;
+      }
+
+      // ✅ fallback: load persisted address from storage
+      try {
+        const stored = await AsyncStorage.getItem("lastAddress");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setSelectedAddress(parsed);
+          setLine1(parsed.line1 || "");
+          setPincode(parsed.pincode || "");
+        }
+      } catch {}
     }
     load();
     return () => {
@@ -102,7 +127,7 @@ export default function CheckoutScreen() {
     };
   }, [user]);
 
-  // 📍 Autofill address
+  // 📍 Autofill address via GPS
   const useMyLocation = async () => {
     try {
       setLocLoading(true);
@@ -145,15 +170,25 @@ export default function CheckoutScreen() {
   };
 
   // 💳 Proceed to Payment
-  const handleProceedToPayment = () => {
+  const handleProceedToPayment = async () => {
     if (!name.trim()) return Alert.alert("Please enter your name");
     if (!/^\d{10}$/.test(phone)) return Alert.alert("Enter a valid 10-digit phone");
     if (!line1.trim()) return Alert.alert("Please enter address line");
     if (!/^\d{6}$/.test(pincode)) return Alert.alert("Enter a valid 6-digit pincode");
     if (!items.length) return Alert.alert("Your cart is empty");
-    if (!selectedAddressId) return Alert.alert("Please select or enter an address");
 
-    // ✅ Use global navigationRef (no parent navigator issues)
+    // ✅ check selected or persisted address
+    let chosen = selectedAddress;
+    if (!chosen) {
+      try {
+        const stored = await AsyncStorage.getItem("lastAddress");
+        if (stored) chosen = JSON.parse(stored);
+      } catch {}
+    }
+
+    if (!chosen && !selectedAddressId)
+      return Alert.alert("Please select or enter an address");
+
     if (!navigationRef.isReady()) {
       Alert.alert("Navigation not ready. Try again in a moment.");
       return;
@@ -161,7 +196,7 @@ export default function CheckoutScreen() {
 
     navigate("Payment", {
       total,
-      addressId: selectedAddressId,
+      addressId: chosen?.id ?? selectedAddressId,
       tbyb,
       name,
       phone,
@@ -233,6 +268,8 @@ export default function CheckoutScreen() {
                     if (!chosen) return;
                     setLine1(chosen.line1 || "");
                     setPincode(chosen.pincode || "");
+                    setSelectedAddress(chosen);
+                    AsyncStorage.setItem("lastAddress", JSON.stringify(chosen));
                   }}
                   style={styles.useBtn}
                 >

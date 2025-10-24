@@ -8,9 +8,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,   
-  Platform     
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { supabase, hasSupabaseConfig } from "@/lib/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,6 +44,7 @@ export default function AddressesScreen() {
   const [pincode, setPincode] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
 
   const canUseSupabase = useMemo(
     () => hasSupabaseConfig && !notConfigured && !!supabase,
@@ -72,7 +74,22 @@ export default function AddressesScreen() {
         if (mounted) setLoading(false);
       }
     }
+
     load();
+
+    // ✅ restore previously selected address if saved
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem("lastAddress");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setSelectedAddress(parsed);
+        }
+      } catch (e) {
+        console.warn("Failed to restore address:", e);
+      }
+    })();
+
     return () => {
       mounted = false;
     };
@@ -81,14 +98,10 @@ export default function AddressesScreen() {
   async function onAdd() {
     if (!line1.trim() || !pincode.trim()) return;
     if (!user) {
-      Alert.alert(
-        "Sign in required",
-        "Please sign in to save an address.",
-        [
-          { text: "Go to Profile", onPress: () => navigation.goBack() },
-          { text: "Cancel", style: "cancel" },
-        ]
-      );
+      Alert.alert("Sign in required", "Please sign in to save an address.", [
+        { text: "Go to Profile", onPress: () => navigation.goBack() },
+        { text: "Cancel", style: "cancel" },
+      ]);
       return;
     }
     if (!canUseSupabase) {
@@ -140,14 +153,12 @@ export default function AddressesScreen() {
   async function onMakeDefault(id: string) {
     if (!user || !canUseSupabase) return;
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("addresses")
         .update({ is_default: true })
         .eq("id", id)
-        .eq("user_id", user.id)
-        .select();
+        .eq("user_id", user.id);
       if (error) throw error;
-      // refresh list to reflect single default
       const { data: fresh } = await supabase
         .from("addresses")
         .select("*")
@@ -160,116 +171,142 @@ export default function AddressesScreen() {
     }
   }
 
+  // ✅ handle deliver-here and persist
+  async function handleDeliverHere(address: Address) {
+    try {
+      setSelectedAddress(address);
+      await AsyncStorage.setItem("lastAddress", JSON.stringify(address));
+(navigation as any).navigate("Checkout", { address });
+    } catch (e) {
+      Alert.alert("Error", "Couldn't select address. Please try again.");
+    }
+  }
+
   return (
-  <KeyboardAvoidingView
-    style={{ flex: 1 }}
-    behavior={Platform.OS === "ios" ? "padding" : undefined}
-    keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0} // tweak if the header overlaps
-  >
-    <View style={styles.container}>
-      <Text style={styles.title}>Addresses</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+    >
+      <View style={styles.container}>
+        <Text style={styles.title}>Addresses</Text>
 
-      {!user ? (
-        <View style={[styles.card, { marginBottom: 16 }]}>
-          <Text style={styles.muted}>
-            You’re not signed in. Sign in from the Profile tab to add and manage your addresses.
-          </Text>
-        </View>
-      ) : null}
-
-      <View style={styles.card}>
-        <TextInput
-          placeholder="Label (Home / Work) — optional"
-          placeholderTextColor="#888"
-          value={label}
-          onChangeText={setLabel}
-          style={styles.input}
-          selectionColor="#fff"          // <-- helps cursor/selection visibility
-        />
-        <TextInput
-          placeholder="Address line 1"
-          placeholderTextColor="#888"
-          value={line1}
-          onChangeText={setLine1}
-          style={styles.input}
-          selectionColor="#fff"
-        />
-        <TextInput
-          placeholder="Address line 2 (optional)"
-          placeholderTextColor="#888"
-          value={line2}
-          onChangeText={setLine2}
-          style={styles.input}
-          selectionColor="#fff"
-        />
-        <TextInput
-          placeholder="Pincode"
-          placeholderTextColor="#888"
-          value={pincode}
-          onChangeText={setPincode}
-          style={styles.input}
-          keyboardType="numeric"
-          selectionColor="#fff"
-        />
-        <TouchableOpacity
-          onPress={onAdd}
-          disabled={saving || !line1.trim() || !pincode.trim()}
-          style={[
-            styles.button,
-            (saving || !line1.trim() || !pincode.trim()) && { opacity: 0.7 },
-          ]}
-        >
-          {saving ? <ActivityIndicator /> : <Text style={styles.buttonText}>Save Address</Text>}
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[styles.subtitle, { marginTop: 16 }]}>Saved addresses</Text>
-
-      {loading ? (
-        <ActivityIndicator />
-      ) : (
-        <FlatList
-          data={addresses}
-          keyExtractor={(item) => item.id}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-          keyboardShouldPersistTaps="handled"    // <-- lets you keep typing/tapping
-          contentContainerStyle={{ paddingBottom: 40 }} // <-- space above keyboard
-          renderItem={({ item }) => (
-            <View style={styles.addressRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.addressLine}>
-                  {item.label ? `${item.label} — ` : ""}{item.line1}
-                </Text>
-                {item.line2 ? <Text style={styles.addressLineMuted}>{item.line2}</Text> : null}
-                <Text style={styles.addressLineMuted}>{item.pincode}</Text>
-                {item.is_default ? <Text style={styles.defaultBadge}>Default</Text> : null}
-              </View>
-
-              <View style={{ gap: 8, alignItems: "flex-end" }}>
-                {!item.is_default ? (
-                  <TouchableOpacity onPress={() => onMakeDefault(item.id)}>
-                    <Text style={styles.action}>Make default</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity onPress={() => onDelete(item.id)}>
-                  <Text style={styles.delete}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-          ListEmptyComponent={
+        {!user ? (
+          <View style={[styles.card, { marginBottom: 16 }]}>
             <Text style={styles.muted}>
-              {user
-                ? "No addresses yet. Add your first one above."
-                : "Sign in to view your saved addresses."}
+              You’re not signed in. Sign in from the Profile tab to add and
+              manage your addresses.
             </Text>
-          }
-        />
-      )}
-    </View>
-  </KeyboardAvoidingView>
-);
+          </View>
+        ) : null}
 
+        <View style={styles.card}>
+          <TextInput
+            placeholder="Label (Home / Work) — optional"
+            placeholderTextColor="#888"
+            value={label}
+            onChangeText={setLabel}
+            style={styles.input}
+            selectionColor="#fff"
+          />
+          <TextInput
+            placeholder="Address line 1"
+            placeholderTextColor="#888"
+            value={line1}
+            onChangeText={setLine1}
+            style={styles.input}
+            selectionColor="#fff"
+          />
+          <TextInput
+            placeholder="Address line 2 (optional)"
+            placeholderTextColor="#888"
+            value={line2}
+            onChangeText={setLine2}
+            style={styles.input}
+            selectionColor="#fff"
+          />
+          <TextInput
+            placeholder="Pincode"
+            placeholderTextColor="#888"
+            value={pincode}
+            onChangeText={setPincode}
+            style={styles.input}
+            keyboardType="numeric"
+            selectionColor="#fff"
+          />
+          <TouchableOpacity
+            onPress={onAdd}
+            disabled={saving || !line1.trim() || !pincode.trim()}
+            style={[
+              styles.button,
+              (saving || !line1.trim() || !pincode.trim()) && { opacity: 0.7 },
+            ]}
+          >
+            {saving ? (
+              <ActivityIndicator />
+            ) : (
+              <Text style={styles.buttonText}>Save Address</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.subtitle, { marginTop: 16 }]}>Saved addresses</Text>
+
+        {loading ? (
+          <ActivityIndicator />
+        ) : (
+          <FlatList
+            data={addresses}
+            keyExtractor={(item) => item.id}
+            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 40 }}
+            renderItem={({ item }) => (
+              <View style={styles.addressRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.addressLine}>
+                    {item.label ? `${item.label} — ` : ""}
+                    {item.line1}
+                  </Text>
+                  {item.line2 ? (
+                    <Text style={styles.addressLineMuted}>{item.line2}</Text>
+                  ) : null}
+                  <Text style={styles.addressLineMuted}>{item.pincode}</Text>
+                  {item.is_default ? (
+                    <Text style={styles.defaultBadge}>Default</Text>
+                  ) : null}
+                </View>
+
+                <View style={{ gap: 8, alignItems: "flex-end" }}>
+                  <TouchableOpacity
+                    onPress={() => handleDeliverHere(item)}
+                    style={styles.deliverBtn}
+                  >
+                    <Text style={styles.deliverText}>Deliver here</Text>
+                  </TouchableOpacity>
+                  {!item.is_default ? (
+                    <TouchableOpacity onPress={() => onMakeDefault(item.id)}>
+                      <Text style={styles.action}>Make default</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity onPress={() => onDelete(item.id)}>
+                    <Text style={styles.delete}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.muted}>
+                {user
+                  ? "No addresses yet. Add your first one above."
+                  : "Sign in to view your saved addresses."}
+              </Text>
+            }
+          />
+        )}
+      </View>
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -304,5 +341,12 @@ const styles = StyleSheet.create({
   defaultBadge: { color: "#6EF17E", fontSize: 12, marginTop: 4 },
   action: { color: "#86B6FF", fontWeight: "600" },
   delete: { color: "#FF6363", fontWeight: "600" },
+  deliverBtn: {
+    backgroundColor: "#FF3366",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  deliverText: { color: "#fff", fontWeight: "600", fontSize: 13 },
   muted: { color: "#AAA" },
 });
