@@ -1,4 +1,4 @@
-package com.qloset.app
+package com.qloteam.qloset
 
 import android.os.Build
 import android.os.Bundle

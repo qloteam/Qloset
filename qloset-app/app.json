@@ -6,26 +6,48 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "splash": { "image": "./assets/splash.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
-    "updates": { "fallbackToCacheTimeout": 0 },
-    "assetBundlePatterns": ["**/*"],
-
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to verify delivery availability."
       }
     },
-
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "package": "com.qloteam.qloset"
     },
-
-    "plugins": ["expo-font"],
-    "web": { "bundler": "metro" }
+    "plugins": [
+      "expo-font"
+    ],
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "supabaseUrl": "https://lljlhwqwmqyiukokqeyi.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsamxod3F3bXF5aXVrb2txZXlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5MTA3NjIsImV4cCI6MjA3MjQ4Njc2Mn0.XxTFpMOrkeAVHQKy0t89yJhdoDr4PwP8OIw0csr1Ilc",
+      "eas": {
+        "projectId": "9729127c-c6ff-4930-a912-9f207a7a8869"
+      }
+    }
   }
 }
