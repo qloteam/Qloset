@@ -6,15 +6,17 @@ import React, {
   useMemo,
   useState,
   PropsWithChildren,
-} from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase, hasSupabaseConfig } from "@/lib/supabaseClient";
+} from 'react';
+import type { Session, User } from '@supabase/supabase-js';
+import { supabase, hasSupabaseConfig } from '@/lib/supabaseClient';
+
 type AuthState = {
   user: User | null;
   session: Session | null;
   loading: boolean;
   error: string | null;
   notConfigured: boolean;
+  // Auth actions
   loginWithPassword: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   sendMagicLink: (email: string) => Promise<void>;
@@ -29,78 +31,75 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const notConfigured = !hasSupabaseConfig || !supabase;
+  const notConfigured = !hasSupabaseConfig;
 
   useEffect(() => {
-    let mounted = true;
+    let isMounted = true;
 
-    // If Supabase isn’t configured, don’t call it
-    if (notConfigured) {
+    async function boot() {
+      if (notConfigured) {
+        // Don’t call Supabase if config is missing
+        setLoading(false);
+        return;
+      }
+
+      // 1) Hydrate any stored session
+      const { data, error } = await supabase.auth.getSession();
+      if (!isMounted) return;
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setSession(data.session ?? null);
+        setUser(data.session?.user ?? null);
+      }
+
       setLoading(false);
-      setUser(null);
-      setSession(null);
-      return;
+
+      // 2) Keep in sync on any auth change (login/logout/token refresh)
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, newSession) => {
+        setSession(newSession ?? null);
+        setUser(newSession?.user ?? null);
+      });
+
+      return () => subscription.unsubscribe();
     }
 
-    (async () => {
-      const { data, error } = await supabase!.auth.getSession();
-      if (!mounted) return;
-      if (error) setError(error.message);
-      setSession(data.session ?? null);
-      setUser(data.session?.user ?? null);
-      setLoading(false);
-    })();
-
-    const { data: listener } = supabase!.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess);
-      setUser(sess?.user ?? null);
-    });
-
+    boot();
     return () => {
-      mounted = false;
-      // unsubscribe safely
-      listener?.subscription?.unsubscribe?.();
+      isMounted = false;
     };
   }, [notConfigured]);
 
-  // ---- Actions ----
-  async function loginWithPassword(email: string, password: string) {
-    if (notConfigured) throw new Error("Authentication not configured");
+  // --- Actions ---
+  const loginWithPassword = async (email: string, password: string) => {
     setError(null);
-    const { error } = await supabase!.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
-  }
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    setSession(data.session ?? null);
+    setUser(data.user ?? null);
+  };
 
-  async function loginWithGoogle() {
-    if (notConfigured) throw new Error("Authentication not configured");
+  const loginWithGoogle = async () => {
     setError(null);
-    const { error } = await supabase!.auth.signInWithOAuth({ provider: "google" });
-    if (error) throw new Error(error.message);
-  }
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+    if (error) throw error;
+  };
 
-  async function sendMagicLink(email: string) {
-    if (notConfigured) throw new Error("Authentication not configured");
+  const sendMagicLink = async (email: string) => {
     setError(null);
-    const { error } = await supabase!.auth.signInWithOtp({ email });
-    if (error) throw new Error(error.message);
-  }
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    if (error) throw error;
+  };
 
-  async function logout() {
-  if (notConfigured) return;
-  setError(null);
-  setLoading(true);                // show brief spinner
-  try {
-    await supabase!.auth.signOut(); // clears Supabase session + AsyncStorage
-    // Clear in-memory state immediately so UI flips to logged-out
+  const logout = async () => {
+    setError(null);
+    await supabase.auth.signOut();
     setSession(null);
     setUser(null);
-  } catch (e: any) {
-    setError(e?.message || "Failed to sign out");
-  } finally {
-    setLoading(false);             // always stop loading
-  }
-}
-
+  };
 
   const value = useMemo<AuthState>(
     () => ({
@@ -122,6 +121,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
 export function useAuth() {
   const ctx = useContext(AuthCtx);
-  if (!ctx) throw new Error("useAuth must be used within <AuthProvider>");
+  if (!ctx) throw new Error('useAuth must be used within <AuthProvider>');
   return ctx;
 }

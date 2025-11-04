@@ -1,7 +1,7 @@
 // App.tsx
 import "react-native-gesture-handler";
 import * as React from "react";
-import { View, Text } from "react-native";
+import { View, Text, ActivityIndicator } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -10,7 +10,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 // Contexts
 import { CartProvider, useCart } from "./src/state/CartContext";
 import { ThemeProvider } from "./src/state/ThemeContext";
-import { AuthProvider } from "./src/contexts/AuthContext";
+import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 import { WishlistProvider } from "./src/state/WishlistContext";
 
 // Screens
@@ -33,7 +33,7 @@ import TermsScreen from "./src/screens/TermsScreen";
 import PrivacyScreen from "./src/screens/PrivacyScreen";
 import WishlistScreen from "./src/screens/WishlistScreen";
 
-// 🧭 Global navigation ref (fixes “Unable to find parent navigator”)
+// 🧭 Global navigation ref
 import { navigationRef } from "./src/nav/navigationRef";
 
 const Tab = createBottomTabNavigator();
@@ -180,45 +180,58 @@ function Tabs() {
   );
 }
 
-/* 🚀 Root App Stack */
+/* 🚀 Root Stack With Auth Loading */
+function RootApp() {
+  const { loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#FF3366" />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer ref={navigationRef}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
+        {/* Startup */}
+        <Stack.Screen name="Splash" component={SplashScreen} />
+
+        {/* Main Tabs */}
+        <Stack.Screen name="MainTabs" component={Tabs} />
+
+        {/* Product & Checkout Flow */}
+        <Stack.Screen name="Product" component={ProductScreen} />
+        <Stack.Screen name="Checkout" component={CheckoutScreen} />
+
+        {/* Payment + Confirmation */}
+        <Stack.Screen
+          name="Payment"
+          component={PaymentScreen}
+          options={{ headerShown: true, title: "Payment" }}
+        />
+        <Stack.Screen
+          name="OrderConfirmation"
+          component={OrderConfirmationScreen}
+          options={{ headerShown: false }}
+        />
+
+        {/* Optional Wishlist */}
+        <Stack.Screen name="Wishlist" component={WishlistScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+/* ✅ App Wrapper */
 export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
         <ThemeProvider>
           <WishlistProvider>
-            {/* ✅ Attach global navigation ref */}
-            <NavigationContainer ref={navigationRef}>
-              <Stack.Navigator
-                screenOptions={{ headerShown: false }}
-                initialRouteName="Splash"
-              >
-                {/* Startup */}
-                <Stack.Screen name="Splash" component={SplashScreen} />
-
-                {/* Main Tabs */}
-                <Stack.Screen name="MainTabs" component={Tabs} />
-
-                {/* Product & Checkout Flow */}
-                <Stack.Screen name="Product" component={ProductScreen} />
-                <Stack.Screen name="Checkout" component={CheckoutScreen} />
-
-                {/* ✅ Payment + Confirmation */}
-                <Stack.Screen
-                  name="Payment"
-                  component={PaymentScreen}
-                  options={{ headerShown: true, title: "Payment" }}
-                />
-                <Stack.Screen
-                  name="OrderConfirmation"
-                  component={OrderConfirmationScreen}
-                  options={{ headerShown: false }}
-                />
-
-                {/* Optional Wishlist */}
-                <Stack.Screen name="Wishlist" component={WishlistScreen} />
-              </Stack.Navigator>
-            </NavigationContainer>
+            <RootApp />
           </WishlistProvider>
         </ThemeProvider>
       </CartProvider>
